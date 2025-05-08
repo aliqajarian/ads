@@ -7,6 +7,7 @@ import os
 import shutil
 from pathlib import Path
 import logging
+from data_downloader import DataDownloader
 
 class DataLoader:
     def __init__(self):
