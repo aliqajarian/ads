@@ -1,4 +1,4 @@
-from src.data_loader import DataLoader
+from data_loader import DataLoader
 import sys
 import os
 
@@ -6,9 +6,9 @@ import os
 if 'google.colab' in sys.modules:
     sys.path.append('/content/ads')  # Add project root directory to path
 
-from src.dbn import DeepBeliefNetwork
-from src.anomaly_detector import AnomalyDetector
-from src.visualizer import Visualizer # Corrected import path
+from dbn import DeepBeliefNetwork
+from anomaly_detector import AnomalyDetector
+from visualizer import Visualizer # Corrected import path
 import numpy as np
 import os
 import joblib # For saving anomaly detector if not using its own save method directly for some reason
