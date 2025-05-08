@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 import logging
 from data_downloader import DataDownloader
+from sklearn.impute import SimpleImputer
 
 class DataLoader:
     def __init__(self):
@@ -42,6 +43,11 @@ class DataLoader:
             merged_df['review/text'] = merged_df['review/text'].fillna('')
             merged_df['review/summary'] = merged_df['review/summary'].fillna('')
             merged_df['categories'] = merged_df['categories'].fillna('')
+            
+            # Impute missing numerical values
+            imputer = SimpleImputer(strategy='mean')
+            numerical_columns = ['review/score', 'helpfulness_ratio', 'ratingsCount']
+            merged_df[numerical_columns] = imputer.fit_transform(merged_df[numerical_columns])
             
             print(f"Successfully loaded {len(merged_df)} reviews")
             return merged_df
