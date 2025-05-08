@@ -12,12 +12,11 @@ from data_downloader import DataDownloader
 class DataLoader:
     def __init__(self):
         # Initialize DataDownloader
-        self.downloader = DataDownloader()
-        # Download all required data files
+        self.downloader = DataDownloader(dataset_name="mohamedbakhet/amazon-books-reviews", download_dir="data/raw")
+        # Get downloaded file paths
         downloaded_files = self.downloader.download_all()
-        # Define paths for the CSV files within the downloaded dataset
-        self.reviews_path = downloaded_files.get('reviews')
-        self.books_path = downloaded_files.get('books_details')
+        self.reviews_path = downloaded_files['reviews']
+        self.books_path = downloaded_files['books_details']
 
     def load_data(self):
         print(f"Loading data from: {self.downloader.data_dir}")
