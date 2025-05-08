@@ -15,14 +15,24 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class DataLoader:
-    def __init__(self):
+    def __init__(self, data_dir: str = "data/raw"):
+        """
+        Initialize the data loader.
+        
+        Args:
+            data_dir (str): Directory where data files are stored
+        """
         # Initialize DataDownloader
-        self.downloader = DataDownloader(dataset_name="mohamedbakhet/amazon-books-reviews", download_dir="data/raw")
+        self.downloader = DataDownloader(data_dir=data_dir)
         # Get downloaded file paths
         try:
             downloaded_files = self.downloader.download_all()
-            self.reviews_path = downloaded_files['reviews']
-            self.books_path = downloaded_files['books_details']
+            # Get file paths from the downloaded files dictionary
+            self.reviews_path = downloaded_files.get('Books_rating', None)
+            self.books_path = downloaded_files.get('books_data', None)
+            
+            if not self.reviews_path or not self.books_path:
+                raise FileNotFoundError("Required files not found in downloaded dataset")
             
             # Verify files exist
             if not os.path.exists(self.reviews_path):
