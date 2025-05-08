@@ -95,6 +95,10 @@ class DataLoader:
             numerical_features
         ])
         
+        # Impute any remaining NaNs
+        imputer = SimpleImputer(strategy='mean')
+        combined_features = imputer.fit_transform(combined_features)
+        
         return combined_features
     
     def split_train_test(self, features, df, test_size=0.2, random_state=42):
