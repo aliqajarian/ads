@@ -33,37 +33,54 @@ Install dependencies locally:
 pip install -r requirements.txt
 ```
 
-## Running on Google Colab
-### 1. Upload the Project
-- Upload the entire project folder to your Google Drive (e.g., in `MyDrive/ColabNotebooks/ads`).
+## Getting Started
 
-### 2. Open a New Colab Notebook
-- In Colab, open a new notebook in the same folder as your project.
+### Local Setup
 
-### 3. Mount Google Drive
-```python
-from google.colab import drive
-drive.mount('/content/drive')
+1. Clone the repository:
+```bash
+git clone https://github.com/aliqajarian/ads.git
+cd ads
 ```
 
-### 4. Clone or Copy the Project (if not already in Drive)
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the main script:
+```bash
+python src/main.py
+```
+
+All outputs and model checkpoints will be saved in the `ads_output` directory by default.
+
+### Running on Google Colab
+
+1. Clone the repository to your Google Drive:
 ```python
-!cp -r /content/drive/MyDrive/ColabNotebooks/ads /content/ads
+# Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Clone the repository
+!git clone https://github.com/aliqajarian/ads.git /content/ads
 %cd /content/ads
 ```
 
-### 5. Install Dependencies
+2. Install dependencies:
 ```python
 !pip install -r requirements.txt
 ```
 
-### 6. Run the Main Script
+3. Run the main script:
 ```python
 !python src/main.py
 ```
 
-### 7. Output and Model Files
-- All model checkpoints and outputs will be saved to your Google Drive under `ads_output` (or as configured in `main.py`).
+All model checkpoints and outputs will be saved to your Google Drive under `ads_output` (as configured in `main.py`).
+
+**Note**: Replace `aliqajarian` in the Git URLs with your actual GitHub username.
 
 ## Dataset
 - Place your dataset in the appropriate location as expected by `data_loader.py` (see its docstring or code for details).
