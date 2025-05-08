@@ -1,6 +1,8 @@
 import os
-import kagglehub
+import subprocess
 import logging
+from pathlib import Path
+import kagglehub
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -8,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class DataDownloader:
     def __init__(self, dataset_name, download_dir):
-        self.dataset_name = dataset_name
+        self.dataset_name = "mohamedbakhet/amazon-books-reviews"
         self.download_dir = download_dir
         try:
             os.makedirs(download_dir, exist_ok=True)
@@ -20,8 +22,10 @@ class DataDownloader:
     def download_all(self):
         try:
             logger.info(f"Downloading dataset {self.dataset_name} to {self.download_dir}")
-            # Download the dataset using kagglehub
-            kagglehub.model_download(self.dataset_name, path=self.download_dir)
+            
+            # Use kagglehub to download the dataset
+            kaggle_hub = kagglehub()
+            kaggle_hub.download_dataset(self.dataset_name, self.download_dir, unzip=True)
             
             # Define expected file paths
             reviews_path = os.path.join(self.download_dir, 'Books_rating.csv')
