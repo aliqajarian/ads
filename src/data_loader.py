@@ -44,13 +44,13 @@ class DataLoader:
             logger.error(f"Error initializing DataLoader: {str(e)}")
             raise
 
-    def load_data(self):
+    def load_data(self, nrows=100000):
         logger.info(f"Loading data from: {self.downloader.data_dir}")
         
         try:
-            # Load the CSV files
-            reviews_df = pd.read_csv(self.reviews_path)
-            books_df = pd.read_csv(self.books_path)
+            # Load the CSV files with optional row limit
+            reviews_df = pd.read_csv(self.reviews_path, nrows=nrows)
+            books_df = pd.read_csv(self.books_path, nrows=nrows)
             
             # Process helpfulness ratings
             reviews_df['helpfulness_numerator'] = reviews_df['review/helpfulness'].str.split('/').str[0].astype(float)
