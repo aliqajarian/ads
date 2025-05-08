@@ -63,9 +63,11 @@ All outputs and model checkpoints will be saved in the `ads_output` directory by
 from google.colab import drive
 drive.mount('/content/drive')
 
-# Clone the repository
+# Clone repository and set Python path
 !git clone https://github.com/aliqajarian/ads.git /content/ads
 %cd /content/ads
+import sys
+sys.path.append('/content/ads')  # Add project root to Python path
 ```
 
 2. Install dependencies:

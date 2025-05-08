@@ -1,4 +1,11 @@
 from src.data_loader import DataLoader
+import sys
+import os
+
+# Detect Colab environment and adjust Python path
+if 'google.colab' in sys.modules:
+    sys.path.append('/content/ads')  # Add project root directory to path
+
 from src.dbn import DeepBeliefNetwork
 from src.anomaly_detector import AnomalyDetector
 from src.visualizer import Visualizer # Corrected import path
