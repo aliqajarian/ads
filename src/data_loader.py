@@ -10,20 +10,35 @@ import logging
 from data_downloader import DataDownloader
 from sklearn.impute import SimpleImputer
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 class DataLoader:
     def __init__(self):
         # Initialize DataDownloader
         self.downloader = DataDownloader(dataset_name="mohamedbakhet/amazon-books-reviews", download_dir="data/raw")
         # Get downloaded file paths
-        downloaded_files = self.downloader.download_all()
-        self.reviews_path = downloaded_files['reviews']
-        self.books_path = downloaded_files['books_details']
+        try:
+            downloaded_files = self.downloader.download_all()
+            self.reviews_path = downloaded_files['reviews']
+            self.books_path = downloaded_files['books_details']
+            
+            # Verify files exist
+            if not os.path.exists(self.reviews_path):
+                raise FileNotFoundError(f"Reviews file not found at: {self.reviews_path}")
+            if not os.path.exists(self.books_path):
+                raise FileNotFoundError(f"Books details file not found at: {self.books_path}")
+                
+        except Exception as e:
+            logger.error(f"Error initializing DataLoader: {str(e)}")
+            raise
 
     def load_data(self):
-        print(f"Loading data from: {self.downloader.data_dir}")
+        logger.info(f"Loading data from: {self.downloader.data_dir}")
         
-        # Load the CSV files
         try:
+            # Load the CSV files
             reviews_df = pd.read_csv(self.reviews_path)
             books_df = pd.read_csv(self.books_path)
             
@@ -52,61 +67,70 @@ class DataLoader:
             # Drop rows with NaN values in numerical columns
             merged_df.dropna(subset=numerical_columns, inplace=True)
             
-            print(f"Successfully loaded {len(merged_df)} reviews")
+            logger.info(f"Successfully loaded {len(merged_df)} reviews")
             return merged_df
             
         except Exception as e:
-            print(f"Error loading dataset: {str(e)}")
+            logger.error(f"Error loading dataset: {str(e)}")
             raise
     
     def prepare_features(self, df):
-        # Extract text features from both review text and summary
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        vectorizer_text = TfidfVectorizer(max_features=800)
-        vectorizer_summary = TfidfVectorizer(max_features=200)
-        
-        text_features = vectorizer_text.fit_transform(df['review/text'])
-        summary_features = vectorizer_summary.fit_transform(df['review/summary'])
-        
-        # Multi-factor feature engineering
-        # Review length
-        review_length = df['review/text'].str.len().values.reshape(-1, 1)
-        # User activity: number of reviews per user
-        user_review_counts = df['User_id'].map(df['User_id'].value_counts()).values.reshape(-1, 1)
-        # Temporal pattern: days since earliest review
-        min_time = df['review_time'].min()
-        days_since_first = (df['review_time'] - min_time).dt.days.values.reshape(-1, 1)
-        
-        # Create numerical features
-        numerical_features = np.column_stack([
-            df['review/score'],
-            df['helpfulness_ratio'],
-            df['ratingsCount'],
-            df['review_time'].astype(np.int64) // 10**9,  # Convert to Unix timestamp
-            review_length,
-            user_review_counts,
-            days_since_first
-        ])
-        
-        # Combine all features
-        combined_features = np.hstack([
-            text_features.toarray(),
-            summary_features.toarray(),
-            numerical_features
-        ])
-        
-        # Impute any remaining NaNs
-        imputer = SimpleImputer(strategy='mean')
-        combined_features = imputer.fit_transform(combined_features)
-        
-        return combined_features
+        try:
+            # Extract text features from both review text and summary
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            vectorizer_text = TfidfVectorizer(max_features=800)
+            vectorizer_summary = TfidfVectorizer(max_features=200)
+            
+            text_features = vectorizer_text.fit_transform(df['review/text'])
+            summary_features = vectorizer_summary.fit_transform(df['review/summary'])
+            
+            # Multi-factor feature engineering
+            # Review length
+            review_length = df['review/text'].str.len().values.reshape(-1, 1)
+            # User activity: number of reviews per user
+            user_review_counts = df['User_id'].map(df['User_id'].value_counts()).values.reshape(-1, 1)
+            # Temporal pattern: days since earliest review
+            min_time = df['review_time'].min()
+            days_since_first = (df['review_time'] - min_time).dt.days.values.reshape(-1, 1)
+            
+            # Create numerical features
+            numerical_features = np.column_stack([
+                df['review/score'],
+                df['helpfulness_ratio'],
+                df['ratingsCount'],
+                df['review_time'].astype(np.int64) // 10**9,  # Convert to Unix timestamp
+                review_length,
+                user_review_counts,
+                days_since_first
+            ])
+            
+            # Combine all features
+            combined_features = np.hstack([
+                text_features.toarray(),
+                summary_features.toarray(),
+                numerical_features
+            ])
+            
+            # Impute any remaining NaNs
+            imputer = SimpleImputer(strategy='mean')
+            combined_features = imputer.fit_transform(combined_features)
+            
+            return combined_features
+            
+        except Exception as e:
+            logger.error(f"Error preparing features: {str(e)}")
+            raise
     
     def split_train_test(self, features, df, test_size=0.2, random_state=42):
         """
         Splits features and DataFrame into train and test sets.
         Returns: X_train, X_test, df_train, df_test
         """
-        X_train, X_test, df_train, df_test = train_test_split(
-            features, df, test_size=test_size, random_state=random_state, shuffle=True
-        )
-        return X_train, X_test, df_train, df_test
+        try:
+            X_train, X_test, df_train, df_test = train_test_split(
+                features, df, test_size=test_size, random_state=random_state, shuffle=True
+            )
+            return X_train, X_test, df_train, df_test
+        except Exception as e:
+            logger.error(f"Error splitting data: {str(e)}")
+            raise
