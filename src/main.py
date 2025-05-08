@@ -24,7 +24,8 @@ def mount_drive():
         print("Not running in Google Colab or google.colab.drive is not available. Using local paths.")
         return "./ads_output" # Local fallback path
 
-DRIVE_OUTPUT_PATH = mount_drive()
+#DRIVE_OUTPUT_PATH = mount_drive()
+DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ColabNotebooks/ads_output"
 DBN_MODEL_PATH = os.path.join(DRIVE_OUTPUT_PATH, "dbn_model.pkl")
 RBM_CHECKPOINT_PATH_PREFIX = os.path.join(DRIVE_OUTPUT_PATH, "rbm_checkpoints")
 ANOMALY_DETECTOR_MODEL_PATH_TEMPLATE = os.path.join(DRIVE_OUTPUT_PATH, "anomaly_detector_{model_type}.pkl")

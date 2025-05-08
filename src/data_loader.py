@@ -4,18 +4,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import kagglehub
 import os
+import shutil
+from pathlib import Path
+import logging
 
 class DataLoader:
     def __init__(self):
-        # Download dataset from Kaggle
-        self.dataset_path = kagglehub.dataset_download("mohamedbakhet/amazon-books-reviews")
-        
+        # Initialize DataDownloader
+        self.downloader = DataDownloader()
+        # Download all required data files
+        downloaded_files = self.downloader.download_all()
         # Define paths for the CSV files within the downloaded dataset
-        self.reviews_path = os.path.join(self.dataset_path, "reviews.csv")
-        self.books_path = os.path.join(self.dataset_path, "books_details.csv")
-    
+        self.reviews_path = downloaded_files.get('reviews')
+        self.books_path = downloaded_files.get('books_details')
+
     def load_data(self):
-        print(f"Loading data from: {self.dataset_path}")
+        print(f"Loading data from: {self.downloader.data_dir}")
         
         # Load the CSV files
         try:
