@@ -30,6 +30,7 @@ class DataLoader:
             reviews_df['helpfulness_numerator'] = reviews_df['review/helpfulness'].str.split('/').str[0].astype(float)
             reviews_df['helpfulness_denominator'] = reviews_df['review/helpfulness'].str.split('/').str[1].astype(float)
             reviews_df['helpfulness_ratio'] = reviews_df['helpfulness_numerator'] / reviews_df['helpfulness_denominator']
+            reviews_df['User_id'] = reviews_df['User_id']
             
             # Convert review time to datetime
             reviews_df['review_time'] = pd.to_datetime(reviews_df['review/time'], unit='s')
@@ -62,7 +63,7 @@ class DataLoader:
         # Review length
         review_length = df['review/text'].str.len().values.reshape(-1, 1)
         # User activity: number of reviews per user
-        user_review_counts = df['reviewerID'].map(df['reviewerID'].value_counts()).values.reshape(-1, 1)
+        user_review_counts = df['User_id'].map(df['User_id'].value_counts()).values.reshape(-1, 1)
         # Temporal pattern: days since earliest review
         min_time = df['review_time'].min()
         days_since_first = (df['review_time'] - min_time).dt.days.values.reshape(-1, 1)
