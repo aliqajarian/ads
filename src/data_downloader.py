@@ -10,23 +10,24 @@ class DataDownloader:
 
     @property
     def data_dir(self):
-        # Prefer Colab dataset path if it exists
-        if os.path.exists(self.colab_dataset_path):
-            return self.colab_dataset_path
-        return self.download_dir
+        # Always use Colab dataset path
+        return self.colab_dataset_path
 
     def download_all(self):
         # If running in Colab and dataset is already present, use it directly
         if os.path.exists(self.colab_dataset_path):
             reviews_path = os.path.join(self.colab_dataset_path, 'Books_rating.csv')
             books_details_path = os.path.join(self.colab_dataset_path, 'books_data.csv')
+            return {
+                'reviews': reviews_path,
+                'books_details': books_details_path
+            }
         else:
             # Ensure the download directory exists
             os.makedirs(self.download_dir, exist_ok=True)
-            # Use kagglehub to download the dataset
-            kagglehub.dataset_download(self.dataset_name, path=self.download_dir)
-            reviews_path = os.path.join(self.download_dir, 'Books_rating.csv')
-            books_details_path = os.path.join(self.download_dir, 'books_data.csv')
+            # Use kagglehub to download the dataset - Skip download in Colab
+            reviews_path = os.path.join(self.colab_dataset_path, 'Books_rating.csv')
+            books_details_path = os.path.join(self.colab_dataset_path, 'books_data.csv')
         return {
             'reviews': reviews_path,
             'books_details': books_details_path
