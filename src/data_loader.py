@@ -49,6 +49,9 @@ class DataLoader:
             numerical_columns = ['review/score', 'helpfulness_ratio', 'ratingsCount']
             merged_df[numerical_columns] = imputer.fit_transform(merged_df[numerical_columns])
             
+            # Drop rows with NaN values in numerical columns
+            merged_df.dropna(subset=numerical_columns, inplace=True)
+            
             print(f"Successfully loaded {len(merged_df)} reviews")
             return merged_df
             
