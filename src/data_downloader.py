@@ -76,7 +76,7 @@ class DataDownloader:
             
             return downloaded_files
             
-        except Exception as e:
+            except Exception as e:
             self.logger.error(f"Failed to download data: {str(e)}")
             raise
 

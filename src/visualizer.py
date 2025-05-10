@@ -1,6 +1,14 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from sklearn.manifold import TSNE
+import pandas as pd
+from sklearn.model_selection import learning_curve
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
+from pyod.models.hbos import HBOS
+from sklearn.cluster import DBSCAN
 
 class Visualizer:
     def plot_rating_distribution(self, df):
@@ -82,4 +90,180 @@ class Visualizer:
         plt.ylabel('Number of Anomalies Detected')
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
+        plt.show()
+
+    def plot_tsne_features(self, features, anomalies, save_path=None):
+        """
+        Create t-SNE visualization of DBN-extracted features.
+        
+        Args:
+            features: DBN-transformed features
+            anomalies: Boolean array indicating anomalies
+            save_path: Optional path to save the plot
+        """
+        # Apply t-SNE
+        tsne = TSNE(n_components=2, random_state=42)
+        features_tsne = tsne.fit_transform(features)
+        
+        # Create the plot
+        plt.figure(figsize=(12, 8))
+        scatter = plt.scatter(
+            features_tsne[:, 0], 
+            features_tsne[:, 1], 
+            c=anomalies, 
+            cmap='coolwarm', 
+            alpha=0.6,
+            s=50
+        )
+        
+        plt.title("t-SNE Visualization of DBN Features", fontsize=14)
+        plt.xlabel("t-SNE Component 1", fontsize=12)
+        plt.ylabel("t-SNE Component 2", fontsize=12)
+        
+        # Add colorbar with custom labels
+        cbar = plt.colorbar(scatter)
+        cbar.set_label('Anomaly Status', fontsize=12)
+        cbar.set_ticks([0, 1])
+        cbar.set_ticklabels(['Normal', 'Anomaly'])
+        
+        # Add grid for better readability
+        plt.grid(True, linestyle='--', alpha=0.7)
+        
+        # Add legend
+        plt.legend(
+            handles=scatter.legend_elements()[0],
+            labels=['Normal', 'Anomaly'],
+            title='Review Type',
+            loc='upper right'
+        )
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"t-SNE plot saved to {save_path}")
+        
+        plt.show()
+
+    def plot_behavioral_features_correlation(self, df, save_path=None):
+        """
+        Create correlation heatmap of behavioral features.
+        
+        Args:
+            df: DataFrame containing the behavioral features
+            save_path: Optional path to save the plot
+        """
+        # Prepare behavioral features
+        behavioral_features = pd.DataFrame({
+            'Review Length': df['review/text'].str.len(),
+            'Rating': df['review/score'],
+            'Helpfulness Ratio': df['helpfulness_ratio'],
+            'User Activity': df['User_id'].map(df['User_id'].value_counts()),
+            'Days Since First Review': (df['review_time'] - df['review_time'].min()).dt.days,
+            'Review Time (Unix)': df['review_time'].astype(np.int64) // 10**9
+        })
+        
+        # Calculate correlation matrix
+        corr_matrix = behavioral_features.corr()
+        
+        # Create the plot
+        plt.figure(figsize=(12, 10))
+        mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+        
+        # Create heatmap
+        sns.heatmap(
+            corr_matrix,
+            mask=mask,
+            annot=True,
+            cmap='viridis',
+            center=0,
+            fmt='.2f',
+            square=True,
+            linewidths=.5,
+            cbar_kws={'shrink': .8}
+        )
+        
+        plt.title("Correlation Heatmap of Behavioral Features", fontsize=14, pad=20)
+        
+        # Rotate x-axis labels for better readability
+        plt.xticks(rotation=45, ha='right')
+        plt.yticks(rotation=0)
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Correlation heatmap saved to {save_path}")
+        
+        plt.show()
+
+    def plot_learning_curves(self, X, y, save_path=None):
+        """
+        Plot learning curves for all models to analyze their sensitivity to training data size.
+        
+        Args:
+            X: Feature matrix
+            y: Target labels
+            save_path: Optional directory path to save the plots
+        """
+        # Define models to analyze
+        models = {
+            'Isolation Forest': IsolationForest(random_state=42),
+            'Local Outlier Factor': LocalOutlierFactor(novelty=True),
+            'One-Class SVM': OneClassSVM(),
+            'HBOS': HBOS(),
+            'DBSCAN': DBSCAN()
+        }
+        
+        # Create a figure with subplots for each model
+        fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+        axes = axes.ravel()
+        
+        for idx, (model_name, model) in enumerate(models.items()):
+            if idx >= len(axes):
+                break
+                
+            # Calculate learning curve
+            train_sizes, train_scores, test_scores = learning_curve(
+                model, X, y,
+                cv=5,
+                scoring='f1',
+                train_sizes=np.linspace(0.1, 1.0, 10),
+                n_jobs=-1
+            )
+            
+            # Calculate mean and std for train and test scores
+            train_mean = np.mean(train_scores, axis=1)
+            train_std = np.std(train_scores, axis=1)
+            test_mean = np.mean(test_scores, axis=1)
+            test_std = np.std(test_scores, axis=1)
+            
+            # Plot learning curve
+            ax = axes[idx]
+            ax.plot(train_sizes, train_mean, label='Train F1', color='blue')
+            ax.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color='blue')
+            ax.plot(train_sizes, test_mean, label='Test F1', color='red')
+            ax.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color='red')
+            
+            # Customize plot
+            ax.set_title(f'Learning Curve - {model_name}')
+            ax.set_xlabel('Training Size')
+            ax.set_ylabel('F1 Score')
+            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.legend(loc='lower right')
+            
+            # Set y-axis limits to be consistent across plots
+            ax.set_ylim([0, 1.1])
+        
+        # Remove empty subplot if any
+        if len(models) < len(axes):
+            fig.delaxes(axes[-1])
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Save plot if path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Learning curves plot saved to {save_path}")
+        
         plt.show()

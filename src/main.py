@@ -1,42 +1,72 @@
 from data_loader import DataLoader
 import sys
 import os
+from sklearn.metrics import precision_score, recall_score, f1_score
+import json
+from dbn import DeepBeliefNetwork
+from anomaly_detector import AnomalyDetector
+from visualizer import Visualizer
+from model_tuner import ModelTuner
+import numpy as np
+import os
+import joblib
 
 # Detect Colab environment and adjust Python path
 if 'google.colab' in sys.modules:
-    sys.path.append('/content/ads')  # Add project root directory to path
+    sys.path.append('/content/ads')
+    from google.colab import drive
+    drive.mount('/content/drive')
+    print("Google Drive mounted successfully.")
+    DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ColabNotebooks/ads_output"
+else:
+    print("Not running in Google Colab. Using local paths.")
+    DRIVE_OUTPUT_PATH = "./ads_output"
 
-from dbn import DeepBeliefNetwork
-from anomaly_detector import AnomalyDetector
-from visualizer import Visualizer # Corrected import path
-import numpy as np
-import os
-import joblib # For saving anomaly detector if not using its own save method directly for some reason
-
-# --- Google Colab/Drive Integration --- 
-def mount_drive():
-    try:
-        from google.colab import drive
-        drive.mount('/content/drive')
-        print("Google Drive mounted successfully.")
-        return "/content/drive/MyDrive/ColabNotebooks/ads_output" # Example path, adjust as needed
-    except ImportError:
-        print("Not running in Google Colab or google.colab.drive is not available. Using local paths.")
-        return "./ads_output" # Local fallback path
-
-#DRIVE_OUTPUT_PATH = mount_drive()
-DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ColabNotebooks/ads_output"
+# Define paths
 DBN_MODEL_PATH = os.path.join(DRIVE_OUTPUT_PATH, "dbn_model.pkl")
 RBM_CHECKPOINT_PATH_PREFIX = os.path.join(DRIVE_OUTPUT_PATH, "rbm_checkpoints")
 ANOMALY_DETECTOR_MODEL_PATH_TEMPLATE = os.path.join(DRIVE_OUTPUT_PATH, "anomaly_detector_{model_type}.pkl")
+RESULTS_PATH = os.path.join(DRIVE_OUTPUT_PATH, "model_results.json")
 
 # Ensure output directories exist
 os.makedirs(DRIVE_OUTPUT_PATH, exist_ok=True)
 os.makedirs(RBM_CHECKPOINT_PATH_PREFIX, exist_ok=True)
 
+def save_results(results, filepath):
+    """Save model results to a JSON file."""
+    serializable_results = {}
+    for model_name, metrics in results.items():
+        serializable_results[model_name] = {
+            k: float(v) if isinstance(v, (np.float32, np.float64)) else v
+            for k, v in metrics.items()
+        }
+    
+    with open(filepath, 'w') as f:
+        json.dump(serializable_results, f, indent=4)
+    print(f"Results saved to {filepath}")
+
+def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
+    """Train or load DBN model."""
+    if os.path.exists(DBN_MODEL_PATH):
+        print(f"Loading existing DBN model from {DBN_MODEL_PATH}...")
+        dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
+        dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
+    else:
+        print("No existing DBN model found. Training a new one...")
+        dbn = DeepBeliefNetwork(
+            hidden_layers_sizes=hidden_layers_sizes,
+            layer_configs=layer_configs,
+            random_state=42,
+            verbose=1,
+            checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX
+        )
+        dbn.fit(X_train, X_val=X_val)
+        dbn.save_model(DBN_MODEL_PATH)
+    return dbn
+
 def main():
     # Initialize data loader
-    data_loader = DataLoader() # DataLoader now takes no arguments
+    data_loader = DataLoader()
     
     # Load and prepare data
     print("Loading data...")
@@ -45,59 +75,86 @@ def main():
 
     # Split data for DBN training and validation
     print("Splitting data for DBN training/validation...")
-    # We use a portion of the data for DBN validation, not for the final anomaly detection test set
-    # The final anomaly detection will still use the full 'features' transformed by the trained DBN
-    X_train_dbn, X_val_dbn, _, _ = data_loader.split_train_test(features, df, test_size=0.15, random_state=42) # 15% for RBM validation
+    X_train_dbn, X_val_dbn, _, _ = data_loader.split_train_test(features, df, test_size=0.15, random_state=42)
     
     # Define layer-specific configurations for DBN
-    # Example: [{'n_iter': 20, 'learning_rate': 0.01}, {'n_iter': 15, 'learning_rate': 0.005}]
-    # Adjust these based on your dataset and desired DBN architecture
     layer_configs = [
         {'n_iter': 25, 'learning_rate': 0.01, 'batch_size': 16},
         {'n_iter': 20, 'learning_rate': 0.005, 'batch_size': 16}
     ]
-    # Ensure hidden_layers_sizes matches the number of configs
-    # Example architecture, adjust as needed. Max components should not exceed input_dim of the layer.
-    hidden_layers_sizes = [min(X_train_dbn.shape[1] // 2, X_train_dbn.shape[1]), min(X_train_dbn.shape[1] // 4, X_train_dbn.shape[1] // 2)] 
+    
+    hidden_layers_sizes = [min(X_train_dbn.shape[1] // 2, X_train_dbn.shape[1]), 
+                          min(X_train_dbn.shape[1] // 4, X_train_dbn.shape[1] // 2)]
 
-    # Initialize and train DBN
-    print("Training Deep Belief Network...")
-    # Check if a DBN model already exists
-    if os.path.exists(DBN_MODEL_PATH):
-        print(f"Loading existing DBN model from {DBN_MODEL_PATH}...")
-        dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
-        # Ensure checkpoint path is updated if running in a new environment
-        dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX 
-    else:
-        print("No existing DBN model found. Training a new one...")
-        dbn = DeepBeliefNetwork(
-        hidden_layers_sizes=hidden_layers_sizes, 
-        layer_configs=layer_configs, 
-        random_state=42, 
-        verbose=1,
-        checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX
-    )
-    dbn.fit(X_train_dbn, X_val=X_val_dbn)
-    dbn.save_model(DBN_MODEL_PATH) # Save the trained DBN model
+    # Train DBN
+    dbn = train_dbn(X_train_dbn, X_val_dbn, hidden_layers_sizes, layer_configs)
     
     # Transform the full feature set using the trained DBN
     transformed_features = dbn.transform(features)
     
-    # Define anomaly detection models to compare
+    # Assuming we have some ground truth labels
+    y_true = np.zeros(len(transformed_features))
+    y_true[:int(len(y_true) * 0.1)] = 1  # Assuming 10% are anomalies
+    
+    # Initialize model tuner
+    model_tuner = ModelTuner(DRIVE_OUTPUT_PATH)
+    
+    # Perform hyperparameter tuning
+    best_params, tuning_results = model_tuner.tune_models(transformed_features, y_true)
+    
+    # Analyze learning curves
+    learning_curve_results = model_tuner.analyze_learning_curves(transformed_features, y_true)
+    
+    # Update model configs with best parameters
     model_configs = [
-        {'model_type': 'isolation_forest', 'contamination': 0.1, 'params': {}},
-        {'model_type': 'lof', 'contamination': 0.1, 'params': {'lof_neighbors': 20}},
-        {'model_type': 'one_class_svm', 'params': {'svm_nu': 0.1, 'svm_kernel': 'rbf', 'svm_gamma': 'scale'}},
-        {'model_type': 'elliptic_envelope', 'params': {'ee_contamination': 0.1}},
-        {'model_type': 'dbscan', 'params': {'dbscan_eps': 0.5, 'dbscan_min_samples': 5}} # DBSCAN doesn't use 'contamination' directly
+        {
+            'model_type': 'isolation_forest',
+            'contamination': best_params['isolation_forest']['contamination'],
+            'params': {
+                'n_estimators': best_params['isolation_forest']['n_estimators'],
+                'max_samples': best_params['isolation_forest']['max_samples']
+            }
+        },
+        {
+            'model_type': 'lof',
+            'contamination': best_params['lof']['contamination'],
+            'params': {
+                'lof_neighbors': best_params['lof']['n_neighbors'],
+                'metric': best_params['lof']['metric']
+            }
+        },
+        {
+            'model_type': 'one_class_svm',
+            'params': {
+                'svm_nu': best_params['one_class_svm']['nu'],
+                'svm_kernel': best_params['one_class_svm']['kernel'],
+                'svm_gamma': best_params['one_class_svm']['gamma']
+            }
+        },
+        {
+            'model_type': 'hbos',
+            'contamination': best_params['hbos']['contamination'],
+            'params': {
+                'hbos_n_bins': best_params['hbos']['n_bins'],
+                'hbos_alpha': best_params['hbos']['alpha']
+            }
+        },
+        {
+            'model_type': 'dbscan',
+            'params': {
+                'dbscan_eps': best_params['dbscan']['eps'],
+                'dbscan_min_samples': best_params['dbscan']['min_samples'],
+                'metric': best_params['dbscan']['metric']
+            }
+        }
     ]
 
     all_anomalies_results = {}
+    model_metrics = {}
 
     for config in model_configs:
         print(f"\nRunning anomaly detection with {config['model_type']}...")
         detector_params = {'model_type': config['model_type'], **config.get('params', {})}
-        # Pass contamination if the model uses it directly (e.g. IsolationForest, LOF)
         if 'contamination' in config:
             detector_params['contamination'] = config['contamination']
         
@@ -109,22 +166,68 @@ def main():
             print(f"No existing {config['model_type']} model found. Training a new one...")
             detector = AnomalyDetector(**detector_params)
             detector.fit(transformed_features)
-            detector.save_model(detector_model_path) # Save the trained anomaly detector
+            detector.save_model(detector_model_path)
             
         anomalies = detector.detect_anomalies(transformed_features)
         all_anomalies_results[config['model_type']] = anomalies
         
+        # Calculate metrics
+        precision = precision_score(y_true, anomalies)
+        recall = recall_score(y_true, anomalies)
+        f1 = f1_score(y_true, anomalies)
+        
+        # Store metrics
+        model_metrics[config['model_type']] = {
+            "Precision": precision,
+            "Recall": recall,
+            "F1": f1,
+            "Anomalies_Detected": int(sum(anomalies)),
+            "Anomaly_Percentage": float((sum(anomalies)/len(anomalies))*100)
+        }
+        
         print(f"Results for {config['model_type']}:")
+        print(f"  Precision: {precision:.4f}")
+        print(f"  Recall: {recall:.4f}")
+        print(f"  F1 Score: {f1:.4f}")
         print(f"  Anomalies detected: {sum(anomalies)}")
         print(f"  Anomaly percentage: {(sum(anomalies)/len(anomalies))*100:.2f}%")
 
-    # Visualize results - original visualizations + new comparison plot (to be added to visualizer.py)
+    # Save results to file
+    save_results(model_metrics, RESULTS_PATH)
+
+    # Visualize results
     print("\nGenerating visualizations...")
     visualizer = Visualizer()
+    
+    # Create output directories for visualizations
+    tsne_output_path = os.path.join(DRIVE_OUTPUT_PATH, "tsne_visualizations")
+    correlation_output_path = os.path.join(DRIVE_OUTPUT_PATH, "correlation_visualizations")
+    learning_curves_path = os.path.join(DRIVE_OUTPUT_PATH, "learning_curves")
+    os.makedirs(tsne_output_path, exist_ok=True)
+    os.makedirs(correlation_output_path, exist_ok=True)
+    os.makedirs(learning_curves_path, exist_ok=True)
+    
+    # Plot behavioral features correlation
+    print("\nGenerating behavioral features correlation heatmap...")
+    correlation_save_path = os.path.join(correlation_output_path, "behavioral_features_correlation.png")
+    visualizer.plot_behavioral_features_correlation(df, save_path=correlation_save_path)
+    
+    # Plot learning curves for model sensitivity analysis
+    print("\nGenerating learning curves for model sensitivity analysis...")
+    learning_curves_save_path = os.path.join(learning_curves_path, "model_learning_curves.png")
+    visualizer.plot_learning_curves(transformed_features, y_true, save_path=learning_curves_save_path)
+    
+    # Plot other visualizations
     visualizer.plot_rating_distribution(df)
     visualizer.plot_review_length_vs_rating(df)
     
-    # Plot anomaly distribution for the first model as an example, or choose one
+    # Plot t-SNE visualization for each model's results
+    for model_type, anomalies in all_anomalies_results.items():
+        print(f"\nGenerating t-SNE visualization for {model_type}...")
+        tsne_save_path = os.path.join(tsne_output_path, f"tsne_{model_type}.png")
+        visualizer.plot_tsne_features(transformed_features, anomalies, save_path=tsne_save_path)
+    
+    # Plot anomaly distribution for the first model as an example
     if 'isolation_forest' in all_anomalies_results:
         visualizer.plot_anomaly_distribution(df, all_anomalies_results['isolation_forest'])
     elif all_anomalies_results:
@@ -132,12 +235,17 @@ def main():
         visualizer.plot_anomaly_distribution(df, all_anomalies_results[first_model_key])
         
     visualizer.plot_dbn_layer_scores(dbn.layer_scores_)
-    visualizer.plot_model_comparison(all_anomalies_results) # New comparison plot
+    visualizer.plot_model_comparison(all_anomalies_results)
     
     # Print summary
     print(f"\nTotal reviews analyzed: {len(df)}")
-    for model_type, anomalies_result in all_anomalies_results.items():
-        print(f"Model: {model_type} - Anomalies detected: {sum(anomalies_result)}, Percentage: {(sum(anomalies_result)/len(anomalies_result))*100:.2f}%")
+    for model_type, metrics in model_metrics.items():
+        print(f"\nModel: {model_type}")
+        print(f"  Precision: {metrics['Precision']:.4f}")
+        print(f"  Recall: {metrics['Recall']:.4f}")
+        print(f"  F1 Score: {metrics['F1']:.4f}")
+        print(f"  Anomalies detected: {metrics['Anomalies_Detected']}")
+        print(f"  Anomaly percentage: {metrics['Anomaly_Percentage']:.2f}%")
 
 if __name__ == "__main__":
     main()

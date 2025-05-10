@@ -15,24 +15,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class DataLoader:
-    def __init__(self, data_dir: str = "data/raw"):
-        """
-        Initialize the data loader.
-        
-        Args:
-            data_dir (str): Directory where data files are stored
-        """
+    def __init__(self):
         # Initialize DataDownloader
-        self.downloader = DataDownloader(data_dir=data_dir)
+        self.downloader = DataDownloader(dataset_name="mohamedbakhet/amazon-books-reviews", download_dir="data/raw")
         # Get downloaded file paths
         try:
-            downloaded_files = self.downloader.download_all()
-            # Get file paths from the downloaded files dictionary
-            self.reviews_path = downloaded_files.get('Books_rating', None)
-            self.books_path = downloaded_files.get('books_data', None)
-            
-            if not self.reviews_path or not self.books_path:
-                raise FileNotFoundError("Required files not found in downloaded dataset")
+        downloaded_files = self.downloader.download_all()
+        self.reviews_path = downloaded_files['reviews']
+        self.books_path = downloaded_files['books_details']
             
             # Verify files exist
             if not os.path.exists(self.reviews_path):
@@ -44,13 +34,13 @@ class DataLoader:
             logger.error(f"Error initializing DataLoader: {str(e)}")
             raise
 
-    def load_data(self, nrows=100000):
+    def load_data(self):
         logger.info(f"Loading data from: {self.downloader.data_dir}")
         
         try:
-            # Load the CSV files with optional row limit
-            reviews_df = pd.read_csv(self.reviews_path, nrows=nrows)
-            books_df = pd.read_csv(self.books_path, nrows=nrows)
+            # Load the CSV files
+            reviews_df = pd.read_csv(self.reviews_path)
+            books_df = pd.read_csv(self.books_path)
             
             # Process helpfulness ratings
             reviews_df['helpfulness_numerator'] = reviews_df['review/helpfulness'].str.split('/').str[0].astype(float)
@@ -86,46 +76,46 @@ class DataLoader:
     
     def prepare_features(self, df):
         try:
-            # Extract text features from both review text and summary
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            vectorizer_text = TfidfVectorizer(max_features=800)
-            vectorizer_summary = TfidfVectorizer(max_features=200)
-            
-            text_features = vectorizer_text.fit_transform(df['review/text'])
-            summary_features = vectorizer_summary.fit_transform(df['review/summary'])
-            
-            # Multi-factor feature engineering
-            # Review length
-            review_length = df['review/text'].str.len().values.reshape(-1, 1)
-            # User activity: number of reviews per user
-            user_review_counts = df['User_id'].map(df['User_id'].value_counts()).values.reshape(-1, 1)
-            # Temporal pattern: days since earliest review
-            min_time = df['review_time'].min()
-            days_since_first = (df['review_time'] - min_time).dt.days.values.reshape(-1, 1)
-            
-            # Create numerical features
-            numerical_features = np.column_stack([
-                df['review/score'],
-                df['helpfulness_ratio'],
-                df['ratingsCount'],
-                df['review_time'].astype(np.int64) // 10**9,  # Convert to Unix timestamp
-                review_length,
-                user_review_counts,
-                days_since_first
-            ])
-            
-            # Combine all features
-            combined_features = np.hstack([
-                text_features.toarray(),
-                summary_features.toarray(),
-                numerical_features
-            ])
+        # Extract text features from both review text and summary
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        vectorizer_text = TfidfVectorizer(max_features=800)
+        vectorizer_summary = TfidfVectorizer(max_features=200)
+        
+        text_features = vectorizer_text.fit_transform(df['review/text'])
+        summary_features = vectorizer_summary.fit_transform(df['review/summary'])
+        
+        # Multi-factor feature engineering
+        # Review length
+        review_length = df['review/text'].str.len().values.reshape(-1, 1)
+        # User activity: number of reviews per user
+        user_review_counts = df['User_id'].map(df['User_id'].value_counts()).values.reshape(-1, 1)
+        # Temporal pattern: days since earliest review
+        min_time = df['review_time'].min()
+        days_since_first = (df['review_time'] - min_time).dt.days.values.reshape(-1, 1)
+        
+        # Create numerical features
+        numerical_features = np.column_stack([
+            df['review/score'],
+            df['helpfulness_ratio'],
+            df['ratingsCount'],
+            df['review_time'].astype(np.int64) // 10**9,  # Convert to Unix timestamp
+            review_length,
+            user_review_counts,
+            days_since_first
+        ])
+        
+        # Combine all features
+        combined_features = np.hstack([
+            text_features.toarray(),
+            summary_features.toarray(),
+            numerical_features
+        ])
             
             # Impute any remaining NaNs
             imputer = SimpleImputer(strategy='mean')
             combined_features = imputer.fit_transform(combined_features)
-            
-            return combined_features
+        
+        return combined_features
             
         except Exception as e:
             logger.error(f"Error preparing features: {str(e)}")
@@ -137,10 +127,10 @@ class DataLoader:
         Returns: X_train, X_test, df_train, df_test
         """
         try:
-            X_train, X_test, df_train, df_test = train_test_split(
-                features, df, test_size=test_size, random_state=random_state, shuffle=True
-            )
-            return X_train, X_test, df_train, df_test
+        X_train, X_test, df_train, df_test = train_test_split(
+            features, df, test_size=test_size, random_state=random_state, shuffle=True
+        )
+        return X_train, X_test, df_train, df_test
         except Exception as e:
             logger.error(f"Error splitting data: {str(e)}")
             raise
