@@ -22,6 +22,7 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         self.feature_subset_ratio = feature_subset_ratio
         self.rbms_ = []
         self.layer_scores_ = [] # To store training/validation scores for each RBM
+        self.selected_feature_indices_ = None # To store selected feature indices for consistent transformation
 
     def _train_rbm_with_early_stopping(self, rbm, X, X_val=None, max_iter=20, batch_size=100, patience=3):
         """Train an RBM with early stopping based on validation score."""
@@ -79,19 +80,21 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         
         return rbm, best_val_score
 
-    def _select_feature_subset(self, X, ratio=1.0):
+    def _select_feature_subset(self, X, ratio=1.0, store_indices=False):
         """Select a subset of features to speed up training."""
         if ratio >= 1.0:
+            self.selected_feature_indices_ = None
             return X
         
         n_features = X.shape[1]
         n_selected = max(1, int(n_features * ratio))
         
-        # Randomly select features (columns)
-        np.random.seed(self.random_state if self.random_state is not None else 42)
-        selected_indices = np.random.choice(n_features, n_selected, replace=False)
+        if store_indices or self.selected_feature_indices_ is None:
+            # Randomly select features (columns)
+            np.random.seed(self.random_state if self.random_state is not None else 42)
+            self.selected_feature_indices_ = np.random.choice(n_features, n_selected, replace=False)
         
-        return X[:, selected_indices]
+        return X[:, self.selected_feature_indices_]
 
     def fit(self, X, y=None, X_val=None):
         start_time = time.time()
@@ -102,11 +105,12 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         if self.feature_subset_ratio < 1.0:
             if self.verbose > 0:
                 print(f"Using {self.feature_subset_ratio*100:.1f}% of features for faster training")
-            current_input = self._select_feature_subset(X, self.feature_subset_ratio)
+            current_input = self._select_feature_subset(X, self.feature_subset_ratio, store_indices=True)
             current_input_val = self._select_feature_subset(X_val, self.feature_subset_ratio) if X_val is not None else None
         else:
             current_input = X
             current_input_val = X_val
+            self.selected_feature_indices_ = None
 
         if self.layer_configs is None:
             # Default configs with faster settings
@@ -155,7 +159,8 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
             
             self.layer_scores_.append({'train_score': train_score, 'val_score': val_score})
             if self.verbose > 0:
-                print(f"RBM Layer {i+1}: Train Score: {train_score:.4f}, Val Score: {val_score:.4f if val_score is not None else 'N/A'}")
+                val_score_str = f"{val_score:.4f}" if val_score is not None else "N/A"
+                print(f"RBM Layer {i+1}: Train Score: {train_score:.4f}, Val Score: {val_score_str}")
                 print(f"Layer {i+1} training completed in {time.time() - layer_start_time:.2f}s")
 
             # Prepare input for the next layer - use parallel processing for large datasets
@@ -196,7 +201,11 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """Transform data through the DBN layers with parallel processing for large datasets."""
-        current_input = X
+        # Apply feature selection if it was used during training
+        if self.selected_feature_indices_ is not None:
+            current_input = X[:, self.selected_feature_indices_]  # Use stored indices directly
+        else:
+            current_input = X
         
         for i, rbm in enumerate(self.rbms_):
             # Use parallel processing for large datasets
@@ -237,7 +246,8 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
             'patience': self.patience,
             'n_jobs': self.n_jobs,
             'use_tqdm': self.use_tqdm,
-            'feature_subset_ratio': self.feature_subset_ratio
+            'feature_subset_ratio': self.feature_subset_ratio,
+            'selected_feature_indices_': self.selected_feature_indices_
         }
         joblib.dump(model_data, filepath)
         if self.verbose > 0:
@@ -254,6 +264,7 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         n_jobs = model_data.get('n_jobs', -1)
         use_tqdm = model_data.get('use_tqdm', True)
         feature_subset_ratio = model_data.get('feature_subset_ratio', 1.0)
+        selected_feature_indices = model_data.get('selected_feature_indices_', None)
 
         model = cls(
             hidden_layers_sizes=model_data['hidden_layers_sizes'],
@@ -269,6 +280,7 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         )
         model.rbms_ = model_data['rbms_']
         model.layer_scores_ = model_data['layer_scores_']
+        model.selected_feature_indices_ = selected_feature_indices
         if model.verbose > 0:
             print(f"DBN model loaded from {filepath}")
         return model
