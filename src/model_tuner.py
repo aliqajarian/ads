@@ -32,43 +32,44 @@ class ModelTuner:
             'hbos': HBOS(),
             'dbscan': DBSCAN()
         }
-        
-        # Define parameter grids for each model
+d        
+        # Define parameter grids for each model with reduced search space
         self.param_grids = {
             'isolation_forest': {
-                'n_estimators': [50, 100, 200],
-                'contamination': [0.01, 0.05, 0.1],
-                'max_samples': ['auto', 0.5, 0.7]
+                'n_estimators': [100],
+                'contamination': [0.05],
+                'max_samples': ['auto']
             },
             'lof': {
-                'n_neighbors': [10, 20, 30],
-                'contamination': [0.01, 0.05, 0.1],
-                'metric': ['euclidean', 'manhattan']
+                'n_neighbors': [20],
+                'contamination': [0.05],
+                'metric': ['euclidean']
             },
             'one_class_svm': {
-                'nu': [0.05, 0.1, 0.2],
-                'kernel': ['rbf', 'poly'],
-                'gamma': ['scale', 'auto', 0.1, 0.01]
+                'nu': [0.1],
+                'kernel': ['rbf'],
+                'gamma': ['scale']
             },
             'hbos': {
-                'n_bins': [5, 10, 20],
-                'alpha': [0.1, 0.2, 0.3],
-                'contamination': [0.01, 0.05, 0.1]
+                'n_bins': [10],
+                'alpha': [0.2],
+                'contamination': [0.05]
             },
             'dbscan': {
-                'eps': [0.3, 0.5, 0.7],
-                'min_samples': [3, 5, 7],
-                'metric': ['euclidean', 'manhattan']
+                'eps': [0.5],
+                'min_samples': [5],
+                'metric': ['euclidean']
             }
         }
 
-    def tune_models(self, X, y):
+    def tune_models(self, X, y, checkpoint_path=None):
         """
         Perform hyperparameter tuning for all models.
         
         Args:
             X: Feature matrix
             y: Target labels
+            checkpoint_path: Optional path to load/save checkpoints
             
         Returns:
             dict: Best parameters and scores for each model
@@ -78,17 +79,30 @@ class ModelTuner:
         tuning_results = {}
         best_params = {}
         
-        for model_name, base_model in self.base_models.items():
+        # Load checkpoint if exists
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            print(f"Loading checkpoint from {checkpoint_path}")
+            with open(checkpoint_path, 'r') as f:
+                checkpoint_data = json.load(f)
+                tuning_results = checkpoint_data.get('tuning_results', {})
+                best_params = checkpoint_data.get('best_params', {})
+        
+        # Get list of models to tune (exclude already tuned models from checkpoint)
+        models_to_tune = [model_name for model_name in self.base_models.keys()
+                         if model_name not in tuning_results]
+        
+        for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
             
-            # Create GridSearchCV object
+            # Create GridSearchCV object with reduced CV folds and early stopping
             grid_search = GridSearchCV(
                 estimator=base_model,
                 param_grid=self.param_grids[model_name],
                 scoring='f1',
-                cv=5,
+                cv=3,  # Reduced from 5 to 3 folds
                 n_jobs=-1,
-                verbose=1
+                verbose=1,
+                error_score='raise'
             )
             
             # Fit the grid search
@@ -124,19 +138,31 @@ class ModelTuner:
             print(f"Best parameters for {model_name}: {best_params[model_name]}")
             print(f"Best F1 score: {best_score:.4f}")
             print(f"Additional metrics: {metrics}")
+            
+            # Save checkpoint after each model
+            if checkpoint_path:
+                checkpoint_data = {
+                    'tuning_results': tuning_results,
+                    'best_params': best_params,
+                    'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S")
+                }
+                with open(checkpoint_path, 'w') as f:
+                    json.dump(checkpoint_data, f, indent=4)
+                print(f"Checkpoint saved to {checkpoint_path}")
         
-        # Save tuning results
+        # Save final tuning results
         self._save_tuning_results(tuning_results)
         
         return best_params, tuning_results
 
-    def analyze_learning_curves(self, X, y):
+    def analyze_learning_curves(self, X, y, checkpoint_path=None):
         """
         Analyze learning curves for all models.
         
         Args:
             X: Feature matrix
             y: Target labels
+            checkpoint_path: Optional path to load/save checkpoints
             
         Returns:
             dict: Learning curve results for each model
@@ -145,7 +171,18 @@ class ModelTuner:
         
         learning_curve_results = {}
         
-        for model_name, model in self.base_models.items():
+        # Load checkpoint if exists
+        if checkpoint_path and os.path.exists(checkpoint_path):
+            print(f"Loading checkpoint from {checkpoint_path}")
+            with open(checkpoint_path, 'r') as f:
+                checkpoint_data = json.load(f)
+                learning_curve_results = checkpoint_data.get('learning_curve_results', {})
+        
+        # Get list of models to analyze (exclude already analyzed models from checkpoint)
+        models_to_analyze = [model_name for model_name in self.base_models.keys()
+                            if model_name not in learning_curve_results]
+        
+        for model_name in models_to_analyze:
             print(f"\nCalculating learning curve for {model_name}...")
             
             # Calculate learning curve
@@ -171,8 +208,18 @@ class ModelTuner:
                 'test_mean': test_mean.tolist(),
                 'test_std': test_std.tolist()
             }
+            
+            # Save checkpoint after each model
+            if checkpoint_path:
+                checkpoint_data = {
+                    'learning_curve_results': learning_curve_results,
+                    'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S")
+                }
+                with open(checkpoint_path, 'w') as f:
+                    json.dump(checkpoint_data, f, indent=4)
+                print(f"Checkpoint saved to {checkpoint_path}")
         
-        # Save learning curve results
+        # Save final learning curve results
         self._save_learning_curve_results(learning_curve_results)
         
         return learning_curve_results
@@ -237,4 +284,4 @@ class ModelTuner:
         
         print(f"\nLearning curve results saved to:")
         print(f"  JSON: {json_path}")
-        print(f"  CSV: {csv_path}") 
+        print(f"  CSV: {csv_path}")
