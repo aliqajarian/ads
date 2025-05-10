@@ -69,8 +69,8 @@ def main():
     data_loader = DataLoader()
     
     # Load and prepare data
-    print("Loading data...")
-    df = data_loader.load_data()
+    print("Loading data (limited to 500k records)...")
+    df = data_loader.load_data(max_records=500000, use_full_dataset=False)
     features = data_loader.prepare_features(df)
 
     # Split data for DBN training and validation
