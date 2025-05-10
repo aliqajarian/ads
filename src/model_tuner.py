@@ -114,7 +114,14 @@ class ModelTuner:
             
             # Calculate additional metrics
             best_model = grid_search.best_estimator_
-            y_pred = best_model.fit_predict(X)
+            
+            # Handle prediction differently for LOF models
+            if model_name == 'lof':
+                best_model.fit(X)
+                y_pred = best_model.predict(X)
+            else:
+                y_pred = best_model.fit_predict(X)
+            
             y_pred = np.where(y_pred == -1, 1, 0)  # Convert to binary (1 for anomaly)
             
             metrics = {
