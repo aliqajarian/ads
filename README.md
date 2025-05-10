@@ -2,6 +2,12 @@
 
 This project implements an advanced anomaly detection system for Amazon book reviews using a combination of Deep Belief Networks (DBN) and multiple anomaly detection algorithms. The system is designed to identify suspicious or anomalous reviews based on various behavioral and textual features.
 
+## Dataset
+
+This project uses the Amazon Books Reviews dataset from Kaggle. The dataset contains comprehensive book reviews from Amazon, which serves as the foundation for our anomaly detection system.
+
+**Dataset Source**: [Amazon Books Reviews on Kaggle](https://www.kaggle.com/datasets/mohamedbakhet/amazon-books-reviews)
+
 ## Features
 
 - **Deep Belief Network (DBN) Feature Extraction**
