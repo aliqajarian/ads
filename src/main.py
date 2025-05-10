@@ -46,19 +46,24 @@ def save_results(results, filepath):
     print(f"Results saved to {filepath}")
 
 def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
-    """Train or load DBN model."""
+    """Train or load DBN model with optimized parameters for faster training."""
     if os.path.exists(DBN_MODEL_PATH):
         print(f"Loading existing DBN model from {DBN_MODEL_PATH}...")
         dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
         dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
     else:
-        print("No existing DBN model found. Training a new one...")
+        print("No existing DBN model found. Training a new one with optimized parameters...")
         dbn = DeepBeliefNetwork(
             hidden_layers_sizes=hidden_layers_sizes,
             layer_configs=layer_configs,
             random_state=42,
             verbose=1,
-            checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX
+            checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX,
+            early_stopping=True,
+            patience=2,  # Reduced patience for faster convergence
+            n_jobs=-1,   # Use all available cores
+            use_tqdm=True,
+            feature_subset_ratio=0.8  # Use 80% of features for faster training
         )
         dbn.fit(X_train, X_val=X_val)
         dbn.save_model(DBN_MODEL_PATH)
@@ -68,25 +73,25 @@ def main():
     # Initialize data loader
     data_loader = DataLoader()
     
-    # Load and prepare data
-    print("Loading data (limited to 500k records)...")
-    df = data_loader.load_data(max_records=500000, use_full_dataset=False)
+    # Load and prepare data with reduced dataset size for faster training
+    print("Loading data (limited to 100k records for faster training)...")
+    df = data_loader.load_data(max_records=100000, use_full_dataset=False)  # Reduced from 500k to 100k
     features = data_loader.prepare_features(df)
 
     # Split data for DBN training and validation
     print("Splitting data for DBN training/validation...")
     X_train_dbn, X_val_dbn, _, _ = data_loader.split_train_test(features, df, test_size=0.15, random_state=42)
     
-    # Define layer-specific configurations for DBN
+    # Define layer-specific configurations for DBN with optimized parameters for faster training
     layer_configs = [
-        {'n_iter': 25, 'learning_rate': 0.01, 'batch_size': 16},
-        {'n_iter': 20, 'learning_rate': 0.005, 'batch_size': 16}
+        {'n_iter': 10, 'learning_rate': 0.05, 'batch_size': 256},
+        {'n_iter': 8, 'learning_rate': 0.03, 'batch_size': 256}
     ]
     
     hidden_layers_sizes = [min(X_train_dbn.shape[1] // 2, X_train_dbn.shape[1]), 
                           min(X_train_dbn.shape[1] // 4, X_train_dbn.shape[1] // 2)]
 
-    # Train DBN
+    # Train DBN with optimized parameters
     dbn = train_dbn(X_train_dbn, X_val_dbn, hidden_layers_sizes, layer_configs)
     
     # Transform the full feature set using the trained DBN
