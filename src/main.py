@@ -14,10 +14,14 @@ import joblib
 # Detect Colab environment and adjust Python path
 if 'google.colab' in sys.modules:
     sys.path.append('/content/ads')
-    from google.colab import drive
-    drive.mount('/content/drive')
-    print("Google Drive mounted successfully.")
-    DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ColabNotebooks/ads_output"
+    try:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        print("Google Drive mounted successfully.")
+        DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ColabNotebooks/ads_output"
+    except Exception as e:
+        print(f"Error mounting Google Drive: {str(e)}")
+        DRIVE_OUTPUT_PATH = "./ads_output"
 else:
     print("Not running in Google Colab. Using local paths.")
     DRIVE_OUTPUT_PATH = "./ads_output"
