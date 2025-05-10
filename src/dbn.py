@@ -148,11 +148,18 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
             self.rbms_.append(rbm)
 
             if self.checkpoint_path_prefix:
-                checkpoint_file = os.path.join(self.checkpoint_path_prefix, f"rbm_layer_{i+1}.pkl")
-                os.makedirs(os.path.dirname(checkpoint_file), exist_ok=True)
-                joblib.dump(rbm, checkpoint_file)
-                if self.verbose > 0:
-                    print(f"Saved checkpoint for RBM layer {i+1} to {checkpoint_file}")
+                try:
+                    checkpoint_file = os.path.join(self.checkpoint_path_prefix, f"rbm_layer_{i+1}.pkl")
+                    # Ensure the checkpoint directory exists
+                    if os.path.dirname(checkpoint_file):
+                        os.makedirs(os.path.dirname(checkpoint_file), exist_ok=True)
+                    
+                    joblib.dump(rbm, checkpoint_file)
+                    if self.verbose > 0:
+                        print(f"Saved checkpoint for RBM layer {i+1} to {checkpoint_file}")
+                except Exception as e:
+                    print(f"Warning: Failed to save checkpoint for RBM layer {i+1}: {str(e)}")
+                    # Continue training even if checkpoint saving fails
 
             # Record scores (pseudo-likelihood)
             train_score = rbm.score_samples(current_input).mean()
@@ -233,7 +240,11 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
 
     def save_model(self, filepath):
         """Saves the trained DBN model to a file."""
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # Ensure the directory exists, creating it if necessary
+        save_dir = os.path.dirname(filepath)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            
         model_data = {
             'hidden_layers_sizes': self.hidden_layers_sizes,
             'layer_configs': self.layer_configs,
@@ -249,14 +260,24 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
             'feature_subset_ratio': self.feature_subset_ratio,
             'selected_feature_indices_': self.selected_feature_indices_
         }
-        joblib.dump(model_data, filepath)
-        if self.verbose > 0:
-            print(f"DBN model saved to {filepath}")
+        
+        try:
+            joblib.dump(model_data, filepath)
+            if self.verbose > 0:
+                print(f"DBN model saved to {filepath}")
+        except Exception as e:
+            print(f"Error saving model to {filepath}: {str(e)}")
+            raise
 
     @classmethod
     def load_model(cls, filepath):
         """Loads a DBN model from a file."""
-        model_data = joblib.load(filepath)
+        try:
+            model_data = joblib.load(filepath)
+        except Exception as e:
+            print(f"Error loading model from {filepath}: {str(e)}")
+            raise
+            
         # Compatibility for models saved before new parameters were added
         checkpoint_path_prefix = model_data.get('checkpoint_path_prefix', None)
         early_stopping = model_data.get('early_stopping', True)
