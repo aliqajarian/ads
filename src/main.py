@@ -24,7 +24,8 @@ if 'google.colab' in sys.modules:
         DRIVE_OUTPUT_PATH = "./ads_output"
 else:
     print("Not running in Google Colab. Using local paths.")
-    DRIVE_OUTPUT_PATH = "./ads_output"
+    RIVE_OUTPUT_PATH = "/content/drive/MyDrive/ads/ads_output"
+    #DRIVE_OUTPUT_PATH = "./ads_output"
 
 # Define paths
 DBN_MODEL_PATH = os.path.join(DRIVE_OUTPUT_PATH, "dbn_model.pkl")
