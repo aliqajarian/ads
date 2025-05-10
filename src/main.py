@@ -74,8 +74,8 @@ def main():
     data_loader = DataLoader()
     
     # Load and prepare data with reduced dataset size for faster training
-    print("Loading data (limited to 100k records for faster training)...")
-    df = data_loader.load_data(max_records=100000, use_full_dataset=False)  # Reduced from 500k to 100k
+    print("Loading data (limited to 250k records for faster training)...")
+    df = data_loader.load_data(max_records=250000, use_full_dataset=False)  # Reduced from 500k to 100k
     features = data_loader.prepare_features(df)
 
     # Split data for DBN training and validation
