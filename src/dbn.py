@@ -239,10 +239,18 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
         return self.transform(X)
 
     def save_model(self, filepath):
-        """Saves the trained DBN model to a file."""
-        # Ensure the directory exists, creating it if necessary
+        """Saves the trained DBN model to a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            Path where to save the model. For Google Colab, this should be a path in the mounted
+            Google Drive directory (e.g., '/content/drive/MyDrive/models/dbn_model.pkl')
+        """
+        # Handle Google Drive paths and ensure the directory exists
         save_dir = os.path.dirname(filepath)
         if save_dir:
+            # Create all parent directories if they don't exist
             os.makedirs(save_dir, exist_ok=True)
             
         model_data = {
@@ -271,7 +279,14 @@ class DeepBeliefNetwork(BaseEstimator, TransformerMixin):
 
     @classmethod
     def load_model(cls, filepath):
-        """Loads a DBN model from a file."""
+        """Loads a DBN model from a file.
+        
+        Parameters
+        ----------
+        filepath : str
+            Path to the saved model file. For Google Colab, this should be a path in the mounted
+            Google Drive directory (e.g., '/content/drive/MyDrive/models/dbn_model.pkl')
+        """
         try:
             model_data = joblib.load(filepath)
         except Exception as e:
