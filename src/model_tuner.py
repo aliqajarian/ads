@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GridSearchCV, learning_curve
+from sklearn.model_selection import GridSearchCV, learning_curve, ParameterGrid
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
@@ -94,32 +94,49 @@ class ModelTuner:
         for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
             
-            # Create GridSearchCV object with reduced CV folds and early stopping
-            grid_search = GridSearchCV(
-                estimator=self.base_models[model_name],
-                param_grid=self.param_grids[model_name],
-                scoring='f1',
-                cv=3,  # Reduced from 5 to 3 folds
-                n_jobs=-1,
-                verbose=1,
-                error_score='raise'
-            )
-            
-            # Fit the grid search
-            grid_search.fit(X, y)
-            
-            # Get best parameters and score
-            best_params[model_name] = grid_search.best_params_
-            best_score = grid_search.best_score_
-            
-            # Calculate additional metrics
-            best_model = grid_search.best_estimator_
-            
-            # Handle prediction differently for LOF models
+            # Handle LOF models differently due to novelty=True
             if model_name == 'lof':
-                best_model.fit(X)
+                # For LOF, we need to fit and predict separately
+                best_score = -float('inf')
+                best_model = None
+                best_params_set = None
+                
+                # Manual grid search for LOF
+                for params in ParameterGrid(self.param_grids[model_name]):
+                    model = LocalOutlierFactor(novelty=True, **params)
+                    model.fit(X)
+                    y_pred = model.predict(X)
+                    y_pred_binary = np.where(y_pred == -1, 1, 0)
+                    score = f1_score(y, y_pred_binary)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_model = model
+                        best_params_set = params
+                
+                best_params[model_name] = best_params_set
                 y_pred = best_model.predict(X)
             else:
+                # For other models, use GridSearchCV as before
+                grid_search = GridSearchCV(
+                    estimator=self.base_models[model_name],
+                    param_grid=self.param_grids[model_name],
+                    scoring='f1',
+                    cv=3,  # Reduced from 5 to 3 folds
+                    n_jobs=-1,
+                    verbose=1,
+                    error_score='raise'
+                )
+                
+                # Fit the grid search
+                grid_search.fit(X, y)
+                
+                # Get best parameters and score
+                best_params[model_name] = grid_search.best_params_
+                best_score = grid_search.best_score_
+                
+                # Calculate additional metrics
+                best_model = grid_search.best_estimator_
                 y_pred = best_model.fit_predict(X)
             
             y_pred = np.where(y_pred == -1, 1, 0)  # Convert to binary (1 for anomaly)
