@@ -32,7 +32,7 @@ class ModelTuner:
             'hbos': HBOS(),
             'dbscan': DBSCAN()
         }
-d        
+        
         # Define parameter grids for each model with reduced search space
         self.param_grids = {
             'isolation_forest': {
