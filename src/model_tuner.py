@@ -96,7 +96,7 @@ class ModelTuner:
             
             # Create GridSearchCV object with reduced CV folds and early stopping
             grid_search = GridSearchCV(
-                estimator=base_model,
+                estimator=self.base_models[model_name],
                 param_grid=self.param_grids[model_name],
                 scoring='f1',
                 cv=3,  # Reduced from 5 to 3 folds
