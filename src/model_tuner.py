@@ -151,25 +151,32 @@ class ModelTuner:
         """
         print("\nPerforming hyperparameter tuning for all models...")
         
+        # First check tuning status to get latest results
+        status = self.check_tuning_status(checkpoint_path)
         tuning_results = {}
         best_params = {}
         
         # Set default checkpoint path if not provided
         if checkpoint_path is None:
             checkpoint_path = os.path.join(self.results_dir, f"tuning_checkpoint_{self.timestamp}.json")
+            
+        # Try to load the most recent results first
+        if status['checkpoint_path'] and os.path.exists(status['checkpoint_path']):
+            print(f"Loading latest results from {status['checkpoint_path']}")
+            try:
+                with open(status['checkpoint_path'], 'r') as f:
+                    checkpoint_data = json.load(f)
+                    tuning_results = checkpoint_data.get('tuning_results', {})
+                    best_params = checkpoint_data.get('best_params', {})
+                    print("\nPreviously tuned models:")
+                    for model in tuning_results:
+                        print(f"  - {model}: F1={tuning_results[model]['best_score']:.4f}")
+            except (IOError, json.JSONDecodeError) as e:
+                print(f"Warning: Could not load checkpoint file: {e}")
+                tuning_results = {}
+                best_params = {}
         
-        # Load checkpoint if exists
-        if os.path.exists(checkpoint_path):
-            print(f"Loading checkpoint from {checkpoint_path}")
-            with open(checkpoint_path, 'r') as f:
-                checkpoint_data = json.load(f)
-                tuning_results = checkpoint_data.get('tuning_results', {})
-                best_params = checkpoint_data.get('best_params', {})
-                print("Loaded progress:")
-                for model in tuning_results:
-                    print(f"  - {model}: Completed (F1={tuning_results[model]['best_score']:.4f})")
-        
-        # Get list of models to tune (exclude already tuned models from checkpoint)
+        # Get list of models to tune (exclude already tuned models)
         models_to_tune = [model_name for model_name in self.base_models.keys()
                          if model_name not in tuning_results]
         
