@@ -24,6 +24,45 @@ class ModelTuner:
         self.results_dir = os.path.join(output_dir, "model_tuning_results")
         os.makedirs(self.results_dir, exist_ok=True)
         
+        # Initialize base models
+        self.base_models = {
+            'isolation_forest': IsolationForest(),
+            'lof': LocalOutlierFactor(novelty=True),
+            'one_class_svm': OneClassSVM(),
+            'hbos': HBOS(),
+            'dbscan': DBSCAN()
+        }
+        
+        # Define parameter grids for each model
+        self.param_grids = {
+            'isolation_forest': {
+                'n_estimators': [100, 200],
+                'max_samples': ['auto', 100],
+                'contamination': [0.1, 0.2]
+            },
+            'lof': {
+                'n_neighbors': [20, 50],
+                'contamination': [0.1, 0.2],
+                'metric': ['euclidean', 'manhattan']
+            },
+            'one_class_svm': {
+                'kernel': ['rbf', 'linear'],
+                'nu': [0.1, 0.2],
+                'gamma': ['scale', 'auto']
+            },
+            'hbos': {
+                'n_bins': [10, 20],
+                'alpha': [0.1, 0.2],
+                'contamination': [0.1, 0.2]
+            },
+            'dbscan': {
+                'eps': [0.3, 0.5],
+                'min_samples': [5, 10],
+                'metric': ['euclidean', 'manhattan']
+            }
+        }
+
+        
     def check_tuning_status(self, checkpoint_path=None):
         """
         Check which models have been tuned based on saved checkpoints.
@@ -96,43 +135,7 @@ class ModelTuner:
                 'error': str(e)
             }
         
-        # Define base models
-        self.base_models = {
-            'isolation_forest': IsolationForest(random_state=42),
-            'lof': LocalOutlierFactor(novelty=True),
-            'one_class_svm': OneClassSVM(),
-            'hbos': HBOS(),
-            'dbscan': DBSCAN()
-        }
-        
-        # Define parameter grids for each model with reduced search space
-        self.param_grids = {
-            'isolation_forest': {
-                'n_estimators': [100],
-                'contamination': [0.05],
-                'max_samples': ['auto']
-            },
-            'lof': {
-                'n_neighbors': [20],
-                'contamination': [0.05],
-                'metric': ['euclidean']
-            },
-            'one_class_svm': {
-                'nu': [0.1],
-                'kernel': ['rbf'],
-                'gamma': ['scale']
-            },
-            'hbos': {
-                'n_bins': [10],
-                'alpha': [0.2],
-                'contamination': [0.05]
-            },
-            'dbscan': {
-                'eps': [0.5],
-                'min_samples': [5],
-                'metric': ['euclidean']
-            }
-        }
+
 
     def tune_models(self, X, y, checkpoint_path=None):
         """
@@ -323,7 +326,7 @@ class ModelTuner:
         
         # Load checkpoint if exists with proper error handling
         if os.path.exists(checkpoint_path):
-to            print(f"Loading checkpoint from {checkpoint_path}")
+            print(f"Loading checkpoint from {checkpoint_path}")
             try:
                 with open(checkpoint_path, 'r') as f:
                     checkpoint_data = json.load(f)
