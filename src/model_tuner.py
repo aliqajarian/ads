@@ -41,9 +41,9 @@ class ModelTuner:
                 'contamination': [0.1, 0.2]
             },
             'lof': {
-                'n_neighbors': [20, 50],
-                'contamination': [0.1, 0.2],
-                'metric': ['euclidean', 'manhattan']
+                'n_neighbors': [20],  # Reduced from [20, 50] to single optimal value
+                'contamination': [0.1],  # Reduced from [0.1, 0.2] to single optimal value
+                'metric': ['euclidean']  # Using only the most common metric
             },
             'one_class_svm': {
                 'kernel': ['rbf', 'linear'],
