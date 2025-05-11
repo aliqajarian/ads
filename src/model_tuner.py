@@ -84,7 +84,8 @@ class ModelTuner:
                         'total_models': len(self.base_models),
                         'completed_models': 0,
                         'remaining_models': len(self.base_models)
-                    }
+                    },
+                    'checkpoint_path': None
                 }
             checkpoint_path = os.path.join(self.results_dir, sorted(checkpoint_files)[-1])
         
@@ -132,7 +133,8 @@ class ModelTuner:
                     'completed_models': 0,
                     'remaining_models': len(self.base_models)
                 },
-                'error': str(e)
+                'error': str(e),
+                'checkpoint_path': None
             }
         
 
