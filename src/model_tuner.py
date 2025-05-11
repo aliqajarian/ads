@@ -197,6 +197,7 @@ class ModelTuner:
                 best_score = -float('inf')
                 best_model = None
                 best_params_set = None
+                cv_results = {'mean_test_score': [], 'params': []}
                 
                 # Manual grid search for LOF
                 for params in ParameterGrid(self.param_grids[model_name]):
@@ -206,6 +207,10 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     score = f1_score(y, y_pred_binary, zero_division=1)
                     
+                    # Store results for each parameter combination
+                    cv_results['mean_test_score'].append(score)
+                    cv_results['params'].append(params)
+                    
                     if score > best_score:
                         best_score = score
                         best_model = model
@@ -213,6 +218,24 @@ class ModelTuner:
                 
                 best_params[model_name] = best_params_set
                 y_pred = best_model.predict(X)
+                
+                # Store results for each parameter combination
+                cv_results['mean_test_score'] = np.array(cv_results['mean_test_score'])
+                cv_results['params'] = cv_results['params']
+                
+                # Create a mock grid_search object to maintain consistency
+                class MockGridSearch:
+                    def __init__(self, cv_results, best_score, best_params):
+                        self.cv_results_ = cv_results
+                        self.best_score_ = best_score
+                        self.best_params_ = best_params
+                        self.best_estimator_ = best_model
+                
+                grid_search = MockGridSearch(
+                    cv_results=cv_results,
+                    best_score=best_score,
+                    best_params=best_params_set
+                )
             else:
                 # For other models, use GridSearchCV with custom scoring
                 def custom_f1_scorer(estimator, X, y):
