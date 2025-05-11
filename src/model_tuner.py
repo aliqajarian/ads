@@ -24,6 +24,78 @@ class ModelTuner:
         self.results_dir = os.path.join(output_dir, "model_tuning_results")
         os.makedirs(self.results_dir, exist_ok=True)
         
+    def check_tuning_status(self, checkpoint_path=None):
+        """
+        Check which models have been tuned based on saved checkpoints.
+        
+        Args:
+            checkpoint_path (str, optional): Path to the checkpoint file. If None, will look for the latest checkpoint.
+            
+        Returns:
+            dict: A dictionary containing tuning status for each model and overall progress
+        """
+        if checkpoint_path is None:
+            # Look for the latest checkpoint in results directory
+            checkpoint_files = [f for f in os.listdir(self.results_dir) if f.startswith("tuning_checkpoint_")]
+            if not checkpoint_files:
+                return {
+                    'tuned_models': [],
+                    'untuned_models': list(self.base_models.keys()),
+                    'progress': {
+                        'total_models': len(self.base_models),
+                        'completed_models': 0,
+                        'remaining_models': len(self.base_models)
+                    }
+                }
+            checkpoint_path = os.path.join(self.results_dir, sorted(checkpoint_files)[-1])
+        
+        try:
+            with open(checkpoint_path, 'r') as f:
+                checkpoint_data = json.load(f)
+                tuning_results = checkpoint_data.get('tuning_results', {})
+                
+                # Get lists of tuned and untuned models
+                tuned_models = list(tuning_results.keys())
+                untuned_models = [model for model in self.base_models.keys() if model not in tuned_models]
+                
+                # Calculate progress
+                progress = {
+                    'total_models': len(self.base_models),
+                    'completed_models': len(tuned_models),
+                    'remaining_models': len(untuned_models)
+                }
+                
+                # Get performance metrics for tuned models
+                model_metrics = {}
+                for model_name, results in tuning_results.items():
+                    model_metrics[model_name] = {
+                        'f1_score': results['best_score'],
+                        'completion_time': results['completion_time'],
+                        'best_parameters': results['best_parameters']
+                    }
+                
+                return {
+                    'tuned_models': tuned_models,
+                    'untuned_models': untuned_models,
+                    'progress': progress,
+                    'model_metrics': model_metrics,
+                    'checkpoint_path': checkpoint_path,
+                    'last_updated': checkpoint_data.get('timestamp')
+                }
+                
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error reading checkpoint file: {e}")
+            return {
+                'tuned_models': [],
+                'untuned_models': list(self.base_models.keys()),
+                'progress': {
+                    'total_models': len(self.base_models),
+                    'completed_models': 0,
+                    'remaining_models': len(self.base_models)
+                },
+                'error': str(e)
+            }
+        
         # Define base models
         self.base_models = {
             'isolation_forest': IsolationForest(random_state=42),
@@ -143,15 +215,18 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary)
 
-                grid_search = GridSearchCV(
-                    estimator=self.base_models[model_name],
-                    param_grid=self.param_grids[model_name],
-                    scoring=custom_f1_scorer,
-                    cv=3,  # Reduced from 5 to 3 folds
-                    n_jobs=-1,
-                    verbose=1,
-                    error_score='raise'
-                )
+                from joblib import parallel_backend
+                
+                # Use context manager for parallel processing
+                with parallel_backend('loky', n_jobs=-1, inner_max_num_threads=1):
+                    grid_search = GridSearchCV(
+                        estimator=self.base_models[model_name],
+                        param_grid=self.param_grids[model_name],
+                        scoring=custom_f1_scorer,
+                        cv=3,  # Reduced from 5 to 3 folds
+                        verbose=1,
+                        error_score='raise'
+                    )
                 
                 # Fit the grid search
                 grid_search.fit(X, y)
@@ -246,15 +321,19 @@ class ModelTuner:
         if checkpoint_path is None:
             checkpoint_path = os.path.join(self.results_dir, f"learning_curves_checkpoint_{self.timestamp}.json")
         
-        # Load checkpoint if exists
+        # Load checkpoint if exists with proper error handling
         if os.path.exists(checkpoint_path):
-            print(f"Loading checkpoint from {checkpoint_path}")
-            with open(checkpoint_path, 'r') as f:
-                checkpoint_data = json.load(f)
-                learning_curve_results = checkpoint_data.get('learning_curve_results', {})
-                print("Loaded progress:")
-                for model in learning_curve_results:
-                    print(f"  - {model}: Completed")
+to            print(f"Loading checkpoint from {checkpoint_path}")
+            try:
+                with open(checkpoint_path, 'r') as f:
+                    checkpoint_data = json.load(f)
+                    learning_curve_results = checkpoint_data.get('learning_curve_results', {})
+                    print("Loaded progress:")
+                    for model in learning_curve_results:
+                        print(f"  - {model}: Completed")
+            except (IOError, json.JSONDecodeError) as e:
+                print(f"Error loading checkpoint: {e}")
+                learning_curve_results = {}
         
         # Get list of models to analyze (exclude already analyzed models from checkpoint)
         models_to_analyze = [model_name for model_name in self.base_models.keys()
@@ -334,9 +413,15 @@ class ModelTuner:
         """Save tuning results to JSON and CSV files."""
         # Save detailed results to JSON
         json_path = os.path.join(self.results_dir, f"tuning_results_final_{self.timestamp}.json")
-        with open(json_path, 'w') as f:
-            json.dump(results, f, indent=4)
         
+        # Use context managers for file operations
+        try:
+            with open(json_path, 'w') as f:
+                json.dump(results, f, indent=4)
+        except IOError as e:
+            print(f"Error saving tuning results to JSON: {e}")
+            return
+            
         # Create summary DataFrame
         summary_data = []
         for model_name, model_results in results.items():
