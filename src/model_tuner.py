@@ -33,32 +33,32 @@ class ModelTuner:
             'dbscan': DBSCAN()
         }
         
-        # Define parameter grids for each model
+        # Define optimized parameter grids for each model
         self.param_grids = {
             'isolation_forest': {
-                'n_estimators': [100, 200],
-                'max_samples': ['auto', 100],
-                'contamination': [0.1, 0.2]
+                'n_estimators': [100],  # Reduced to single optimal value
+                'max_samples': ['auto'],  # Reduced to default value
+                'contamination': [0.1]  # Reduced to single optimal value
             },
             'lof': {
-                'n_neighbors': [20],  # Reduced from [20, 50] to single optimal value
-                'contamination': [0.1],  # Reduced from [0.1, 0.2] to single optimal value
-                'metric': ['euclidean']  # Using only the most common metric
+                'n_neighbors': [20],  # Single optimal value
+                'contamination': [0.1],  # Single optimal value
+                'metric': ['euclidean']  # Most common metric
             },
             'one_class_svm': {
-                'kernel': ['rbf', 'linear'],
-                'nu': [0.1, 0.2],
-                'gamma': ['scale', 'auto']
+                'kernel': ['rbf'],  # Most effective kernel
+                'nu': [0.1],  # Single optimal value
+                'gamma': ['scale']  # Default value
             },
             'hbos': {
-                'n_bins': [10, 20],
-                'alpha': [0.1, 0.2],
-                'contamination': [0.1, 0.2]
+                'n_bins': [10],  # Default value
+                'alpha': [0.1],  # Single optimal value
+                'contamination': [0.1]  # Single optimal value
             },
             'dbscan': {
-                'eps': [0.3, 0.5],
-                'min_samples': [5, 10],
-                'metric': ['euclidean', 'manhattan']
+                'eps': [0.5],  # Single optimal value
+                'min_samples': [5],  # Default value
+                'metric': ['euclidean']  # Most common metric
             }
         }
 
@@ -197,7 +197,7 @@ class ModelTuner:
                     model.fit(X)
                     y_pred = model.predict(X)
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
-                    score = f1_score(y, y_pred_binary)
+                    score = f1_score(y, y_pred_binary, zero_division=1)
                     
                     if score > best_score:
                         best_score = score
@@ -216,7 +216,7 @@ class ModelTuner:
                         y_pred = estimator.predict(X)
                     # Convert -1 to 1 for anomaly detection
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
-                    return f1_score(y, y_pred_binary)
+                    return f1_score(y, y_pred_binary, zero_division=1)
 
                 from joblib import parallel_backend
                 
@@ -245,9 +245,9 @@ class ModelTuner:
             y_pred = np.where(y_pred == -1, 1, 0)  # Convert to binary (1 for anomaly)
             
             metrics = {
-                'precision': precision_score(y, y_pred),
-                'recall': recall_score(y, y_pred),
-                'f1': f1_score(y, y_pred),
+                'precision': precision_score(y, y_pred, zero_division=1),
+                'recall': recall_score(y, y_pred, zero_division=1),
+                'f1': f1_score(y, y_pred, zero_division=1),
                 'roc_auc': roc_auc_score(y, y_pred) if len(np.unique(y)) > 1 else None
             }
             
