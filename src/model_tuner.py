@@ -79,17 +79,32 @@ class ModelTuner:
         tuning_results = {}
         best_params = {}
         
+        # Set default checkpoint path if not provided
+        if checkpoint_path is None:
+            checkpoint_path = os.path.join(self.results_dir, f"tuning_checkpoint_{self.timestamp}.json")
+        
         # Load checkpoint if exists
-        if checkpoint_path and os.path.exists(checkpoint_path):
+        if os.path.exists(checkpoint_path):
             print(f"Loading checkpoint from {checkpoint_path}")
             with open(checkpoint_path, 'r') as f:
                 checkpoint_data = json.load(f)
                 tuning_results = checkpoint_data.get('tuning_results', {})
                 best_params = checkpoint_data.get('best_params', {})
+                print("Loaded progress:")
+                for model in tuning_results:
+                    print(f"  - {model}: Completed (F1={tuning_results[model]['best_score']:.4f})")
         
         # Get list of models to tune (exclude already tuned models from checkpoint)
         models_to_tune = [model_name for model_name in self.base_models.keys()
                          if model_name not in tuning_results]
+        
+        if not models_to_tune:
+            print("All models have been tuned. Loading results from checkpoint.")
+            return best_params, tuning_results
+        
+        print(f"\nRemaining models to tune: {len(models_to_tune)}")
+        for model_name in models_to_tune:
+            print(f"  - {model_name}")
         
         for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
@@ -117,11 +132,21 @@ class ModelTuner:
                 best_params[model_name] = best_params_set
                 y_pred = best_model.predict(X)
             else:
-                # For other models, use GridSearchCV as before
+                # For other models, use GridSearchCV with custom scoring
+                def custom_f1_scorer(estimator, X, y):
+                    if hasattr(estimator, 'fit_predict'):
+                        y_pred = estimator.fit_predict(X)
+                    else:
+                        estimator.fit(X)
+                        y_pred = estimator.predict(X)
+                    # Convert -1 to 1 for anomaly detection
+                    y_pred_binary = np.where(y_pred == -1, 1, 0)
+                    return f1_score(y, y_pred_binary)
+
                 grid_search = GridSearchCV(
                     estimator=self.base_models[model_name],
                     param_grid=self.param_grids[model_name],
-                    scoring='f1',
+                    scoring=custom_f1_scorer,
                     cv=3,  # Reduced from 5 to 3 folds
                     n_jobs=-1,
                     verbose=1,
@@ -156,23 +181,45 @@ class ModelTuner:
                 'all_results': {
                     'mean_test_score': grid_search.cv_results_['mean_test_score'].tolist(),
                     'params': grid_search.cv_results_['params']
-                }
+                },
+                'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
-            print(f"Best parameters for {model_name}: {best_params[model_name]}")
-            print(f"Best F1 score: {best_score:.4f}")
-            print(f"Additional metrics: {metrics}")
+            # Print detailed results
+            print(f"\nResults for {model_name}:")
+            print(f"  Best parameters: {best_params[model_name]}")
+            print(f"  Best F1 score: {best_score:.4f}")
+            print(f"  Metrics:")
+            print(f"    - Precision: {metrics['precision']:.4f}")
+            print(f"    - Recall: {metrics['recall']:.4f}")
+            print(f"    - F1: {metrics['f1']:.4f}")
+            if metrics['roc_auc'] is not None:
+                print(f"    - ROC AUC: {metrics['roc_auc']:.4f}")
             
             # Save checkpoint after each model
-            if checkpoint_path:
-                checkpoint_data = {
-                    'tuning_results': tuning_results,
-                    'best_params': best_params,
-                    'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S")
+            checkpoint_data = {
+                'tuning_results': tuning_results,
+                'best_params': best_params,
+                'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
+                'progress': {
+                    'total_models': len(self.base_models),
+                    'completed_models': len(tuning_results),
+                    'remaining_models': len(self.base_models) - len(tuning_results)
                 }
-                with open(checkpoint_path, 'w') as f:
-                    json.dump(checkpoint_data, f, indent=4)
-                print(f"Checkpoint saved to {checkpoint_path}")
+            }
+            with open(checkpoint_path, 'w') as f:
+                json.dump(checkpoint_data, f, indent=4)
+            print(f"\nProgress saved to {checkpoint_path}")
+            print(f"Progress: {len(tuning_results)}/{len(self.base_models)} models completed")
+            
+            # Save intermediate results file
+            intermediate_results_path = os.path.join(
+                self.results_dir, 
+                f"tuning_results_{model_name}_{self.timestamp}.json"
+            )
+            with open(intermediate_results_path, 'w') as f:
+                json.dump(tuning_results[model_name], f, indent=4)
+            print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
         
         # Save final tuning results
         self._save_tuning_results(tuning_results)
@@ -195,16 +242,31 @@ class ModelTuner:
         
         learning_curve_results = {}
         
+        # Set default checkpoint path if not provided
+        if checkpoint_path is None:
+            checkpoint_path = os.path.join(self.results_dir, f"learning_curves_checkpoint_{self.timestamp}.json")
+        
         # Load checkpoint if exists
-        if checkpoint_path and os.path.exists(checkpoint_path):
+        if os.path.exists(checkpoint_path):
             print(f"Loading checkpoint from {checkpoint_path}")
             with open(checkpoint_path, 'r') as f:
                 checkpoint_data = json.load(f)
                 learning_curve_results = checkpoint_data.get('learning_curve_results', {})
+                print("Loaded progress:")
+                for model in learning_curve_results:
+                    print(f"  - {model}: Completed")
         
         # Get list of models to analyze (exclude already analyzed models from checkpoint)
         models_to_analyze = [model_name for model_name in self.base_models.keys()
                             if model_name not in learning_curve_results]
+        
+        if not models_to_analyze:
+            print("Learning curves for all models have been analyzed. Loading results from checkpoint.")
+            return learning_curve_results
+        
+        print(f"\nRemaining models to analyze: {len(models_to_analyze)}")
+        for model_name in models_to_analyze:
+            print(f"  - {model_name}")
         
         for model_name in models_to_analyze:
             print(f"\nCalculating learning curve for {model_name}...")
@@ -230,18 +292,38 @@ class ModelTuner:
                 'train_mean': train_mean.tolist(),
                 'train_std': train_std.tolist(),
                 'test_mean': test_mean.tolist(),
-                'test_std': test_std.tolist()
+                'test_std': test_std.tolist(),
+                'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            # Print progress
+            print(f"\nLearning curve analysis completed for {model_name}")
+            print(f"  Final train score: {train_mean[-1]:.4f} ± {train_std[-1]:.4f}")
+            print(f"  Final test score: {test_mean[-1]:.4f} ± {test_std[-1]:.4f}")
+            
             # Save checkpoint after each model
-            if checkpoint_path:
-                checkpoint_data = {
-                    'learning_curve_results': learning_curve_results,
-                    'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S")
+            checkpoint_data = {
+                'learning_curve_results': learning_curve_results,
+                'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
+                'progress': {
+                    'total_models': len(self.base_models),
+                    'completed_models': len(learning_curve_results),
+                    'remaining_models': len(self.base_models) - len(learning_curve_results)
                 }
-                with open(checkpoint_path, 'w') as f:
-                    json.dump(checkpoint_data, f, indent=4)
-                print(f"Checkpoint saved to {checkpoint_path}")
+            }
+            with open(checkpoint_path, 'w') as f:
+                json.dump(checkpoint_data, f, indent=4)
+            print(f"\nProgress saved to {checkpoint_path}")
+            print(f"Progress: {len(learning_curve_results)}/{len(self.base_models)} models completed")
+            
+            # Save intermediate results file
+            intermediate_results_path = os.path.join(
+                self.results_dir, 
+                f"learning_curves_{model_name}_{self.timestamp}.json"
+            )
+            with open(intermediate_results_path, 'w') as f:
+                json.dump(learning_curve_results[model_name], f, indent=4)
+            print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
         
         # Save final learning curve results
         self._save_learning_curve_results(learning_curve_results)
@@ -251,7 +333,7 @@ class ModelTuner:
     def _save_tuning_results(self, results):
         """Save tuning results to JSON and CSV files."""
         # Save detailed results to JSON
-        json_path = os.path.join(self.results_dir, f"tuning_results_{self.timestamp}.json")
+        json_path = os.path.join(self.results_dir, f"tuning_results_final_{self.timestamp}.json")
         with open(json_path, 'w') as f:
             json.dump(results, f, indent=4)
         
@@ -265,22 +347,32 @@ class ModelTuner:
                 'Recall': model_results['metrics']['recall'],
                 'F1_Score': model_results['metrics']['f1'],
                 'ROC_AUC': model_results['metrics']['roc_auc'],
-                'Best_Parameters': str(model_results['best_parameters'])
+                'Best_Parameters': str(model_results['best_parameters']),
+                'Completion_Time': model_results.get('completion_time', 'N/A')
             })
         
         # Save summary to CSV
         summary_df = pd.DataFrame(summary_data)
-        csv_path = os.path.join(self.results_dir, f"tuning_summary_{self.timestamp}.csv")
+        csv_path = os.path.join(self.results_dir, f"tuning_summary_final_{self.timestamp}.csv")
         summary_df.to_csv(csv_path, index=False)
         
-        print(f"\nTuning results saved to:")
+        print(f"\nFinal tuning results saved to:")
         print(f"  JSON: {json_path}")
         print(f"  CSV: {csv_path}")
+        print("\nModel Performance Summary:")
+        for row in summary_data:
+            print(f"\n{row['Model']}:")
+            print(f"  F1 Score: {row['F1_Score']:.4f}")
+            print(f"  Precision: {row['Precision']:.4f}")
+            print(f"  Recall: {row['Recall']:.4f}")
+            if row['ROC_AUC'] is not None:
+                print(f"  ROC AUC: {row['ROC_AUC']:.4f}")
+            print(f"  Completed: {row['Completion_Time']}")
 
     def _save_learning_curve_results(self, results):
         """Save learning curve results to JSON and CSV files."""
         # Save detailed results to JSON
-        json_path = os.path.join(self.results_dir, f"learning_curves_{self.timestamp}.json")
+        json_path = os.path.join(self.results_dir, f"learning_curves_final_{self.timestamp}.json")
         with open(json_path, 'w') as f:
             json.dump(results, f, indent=4)
         
@@ -298,14 +390,22 @@ class ModelTuner:
                 'Final_Test_Score': final_test_score,
                 'Performance_Gap': performance_gap,
                 'Train_Score_Std': model_results['train_std'][-1],
-                'Test_Score_Std': model_results['test_std'][-1]
+                'Test_Score_Std': model_results['test_std'][-1],
+                'Completion_Time': model_results.get('completion_time', 'N/A')
             })
         
         # Save summary to CSV
         summary_df = pd.DataFrame(summary_data)
-        csv_path = os.path.join(self.results_dir, f"learning_curves_summary_{self.timestamp}.csv")
+        csv_path = os.path.join(self.results_dir, f"learning_curves_summary_final_{self.timestamp}.csv")
         summary_df.to_csv(csv_path, index=False)
         
-        print(f"\nLearning curve results saved to:")
+        print(f"\nFinal learning curve results saved to:")
         print(f"  JSON: {json_path}")
         print(f"  CSV: {csv_path}")
+        print("\nLearning Curve Summary:")
+        for row in summary_data:
+            print(f"\n{row['Model']}:")
+            print(f"  Train Score: {row['Final_Train_Score']:.4f} ± {row['Train_Score_Std']:.4f}")
+            print(f"  Test Score: {row['Final_Test_Score']:.4f} ± {row['Test_Score_Std']:.4f}")
+            print(f"  Performance Gap: {row['Performance_Gap']:.4f}")
+            print(f"  Completed: {row['Completion_Time']}")
