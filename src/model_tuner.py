@@ -393,6 +393,9 @@ class ModelTuner:
         for model_name in models_to_analyze:
             print(f"  - {model_name}")
         
+        # Configure parallel processing with optimized settings
+        n_jobs = min(2, os.cpu_count() or 1)  # Limit parallel jobs
+        
         for model_name in models_to_analyze:
             print(f"\nCalculating learning curve for {model_name}...")
             
@@ -410,13 +413,14 @@ class ModelTuner:
                 y_pred_binary = np.where(y_pred == -1, 1, 0)
                 return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
             
-            # Calculate learning curve with custom scorer
+            # Calculate learning curve with optimized settings
             train_sizes, train_scores, test_scores = learning_curve(
                 model, X, y,
-                cv=5,
+                cv=3,  # Reduced from 5 to 3 folds
                 scoring=custom_f1_scorer,
-                train_sizes=np.linspace(0.1, 1.0, 10),
-                n_jobs=-1
+                train_sizes=np.linspace(0.2, 1.0, 5),  # Reduced points and starting from 20%
+                n_jobs=n_jobs,
+                pre_dispatch='1*n_jobs'  # Control memory usage
             )
             
             # Calculate statistics
