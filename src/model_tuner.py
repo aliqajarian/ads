@@ -5,7 +5,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 from pyod.models.hbos import HBOS
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import Birch
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 import json
 import os
@@ -30,7 +30,7 @@ class ModelTuner:
             'lof': LocalOutlierFactor(novelty=True),
             'one_class_svm': OneClassSVM(),
             'hbos': HBOS(),
-            'dbscan': DBSCAN()
+            'birch': Birch()
         }
         
         # Define optimized parameter grids for each model
@@ -55,11 +55,11 @@ class ModelTuner:
                 'alpha': [0.1],  # Single optimal value
                 'contamination': [0.1]  # Single optimal value
             },
-            'dbscan': {
-                'eps': [0.3, 0.5, 0.7],  # Multiple eps values for different cluster densities
-                'min_samples': [3, 5],  # Multiple min_samples for noise sensitivity
-                'metric': ['euclidean'],  # Most efficient metric
-                'algorithm': ['auto']  # Let DBSCAN choose the most efficient algorithm
+            'birch': {
+                'threshold': [0.5],  # Default value for controlling subcluster diameter
+                'branching_factor': [50],  # Default value for maximum number of CF subclusters
+                'n_clusters': [3],  # Number of clusters after the final clustering step
+                'compute_labels': [True]  # Enable label computation
             }
         }
 
@@ -194,22 +194,22 @@ class ModelTuner:
         for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
             
-            # Handle LOF and DBSCAN models differently
-            if model_name in ['lof', 'dbscan']:
-                # For LOF and DBSCAN, we need to fit and predict separately
+            # Handle LOF and Birch models differently
+            if model_name in ['lof', 'birch']:
+                # For LOF and Birch, we need to fit and predict separately
                 best_score = -float('inf')
                 best_model = None
                 best_params_set = None
                 cv_results = {'mean_test_score': [], 'params': []}
                 
-                # Manual grid search for LOF/DBSCAN
+                # Manual grid search for LOF/Birch
                 for params in ParameterGrid(self.param_grids[model_name]):
                     if model_name == 'lof':
                         model = LocalOutlierFactor(novelty=True, **params)
                         model.fit(X)
                         y_pred = model.predict(X)
-                    else:  # DBSCAN
-                        model = DBSCAN(**params)
+                    else:  # Birch
+                        model = Birch(**params)
                         y_pred = model.fit_predict(X)
                     
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
@@ -396,11 +396,25 @@ class ModelTuner:
         for model_name in models_to_analyze:
             print(f"\nCalculating learning curve for {model_name}...")
             
-            # Calculate learning curve
+            # Initialize model from base_models
+            model = self.base_models[model_name]
+            
+            # Define custom scorer for anomaly detection
+            def custom_f1_scorer(estimator, X, y):
+                if hasattr(estimator, 'fit_predict'):
+                    y_pred = estimator.fit_predict(X)
+                else:
+                    estimator.fit(X)
+                    y_pred = estimator.predict(X)
+                # Convert -1 to 1 for anomaly detection
+                y_pred_binary = np.where(y_pred == -1, 1, 0)
+                return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
+            
+            # Calculate learning curve with custom scorer
             train_sizes, train_scores, test_scores = learning_curve(
                 model, X, y,
                 cv=5,
-                scoring='f1',
+                scoring=custom_f1_scorer,
                 train_sizes=np.linspace(0.1, 1.0, 10),
                 n_jobs=-1
             )
