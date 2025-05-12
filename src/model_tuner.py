@@ -56,9 +56,10 @@ class ModelTuner:
                 'contamination': [0.1]  # Single optimal value
             },
             'dbscan': {
-                'eps': [0.5],  # Single optimal value
-                'min_samples': [5],  # Default value
-                'metric': ['euclidean']  # Most common metric
+                'eps': [0.3, 0.5, 0.7],  # Multiple eps values for different cluster densities
+                'min_samples': [3, 5],  # Multiple min_samples for noise sensitivity
+                'metric': ['euclidean'],  # Most efficient metric
+                'algorithm': ['auto']  # Let DBSCAN choose the most efficient algorithm
             }
         }
 
@@ -193,19 +194,24 @@ class ModelTuner:
         for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
             
-            # Handle LOF models differently due to novelty=True
-            if model_name == 'lof':
-                # For LOF, we need to fit and predict separately
+            # Handle LOF and DBSCAN models differently
+            if model_name in ['lof', 'dbscan']:
+                # For LOF and DBSCAN, we need to fit and predict separately
                 best_score = -float('inf')
                 best_model = None
                 best_params_set = None
                 cv_results = {'mean_test_score': [], 'params': []}
                 
-                # Manual grid search for LOF
+                # Manual grid search for LOF/DBSCAN
                 for params in ParameterGrid(self.param_grids[model_name]):
-                    model = LocalOutlierFactor(novelty=True, **params)
-                    model.fit(X)
-                    y_pred = model.predict(X)
+                    if model_name == 'lof':
+                        model = LocalOutlierFactor(novelty=True, **params)
+                        model.fit(X)
+                        y_pred = model.predict(X)
+                    else:  # DBSCAN
+                        model = DBSCAN(**params)
+                        y_pred = model.fit_predict(X)
+                    
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     score = f1_score(y, y_pred_binary, zero_division=1)
                     
@@ -250,18 +256,23 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary, zero_division=1)
 
-                from joblib import parallel_backend
+                # Configure parallel processing with optimized settings and resource management
+                n_jobs = min(2, os.cpu_count() or 1)  # Reduce parallel jobs to minimize resource usage
+                temp_folder = os.path.join(self.output_dir, 'joblib_temp')
+                os.makedirs(temp_folder, exist_ok=True)
                 
-                # Use context manager for parallel processing
-                with parallel_backend('loky', n_jobs=-1, inner_max_num_threads=1):
-                    grid_search = GridSearchCV(
-                        estimator=self.base_models[model_name],
-                        param_grid=self.param_grids[model_name],
-                        scoring=custom_f1_scorer,
-                        cv=3,  # Reduced from 5 to 3 folds
-                        verbose=1,
-                        error_score='raise'
-                    )
+                # Configure GridSearchCV with resource-efficient settings
+                grid_search = GridSearchCV(
+                    estimator=self.base_models[model_name],
+                    param_grid=self.param_grids[model_name],
+                    scoring=custom_f1_scorer,
+                    cv=3,  # Use 3-fold CV for efficiency
+                    verbose=1,
+                    error_score='raise',
+                    n_jobs=n_jobs,
+                    pre_dispatch='1*n_jobs',  # Reduce job dispatching to prevent resource leaks
+                    max_nbytes=None  # Disable memory caching to prevent leaks
+                )
                 
                 # Fit the grid search
                 grid_search.fit(X, y)
