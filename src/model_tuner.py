@@ -406,15 +406,27 @@ class ModelTuner:
                 y_pred_binary = np.where(y_pred == -1, 1, 0)
                 return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
             
-            # Calculate learning curve with notebook-optimized settings
-            train_sizes, train_scores, test_scores = learning_curve(
-                model, X, y,
-                cv=2,  # Minimal cross-validation for notebooks
-                scoring=custom_f1_scorer,
-                train_sizes=np.linspace(0.3, 1.0, 4),  # Fewer points to reduce memory usage
-                n_jobs=1,  # Single process for notebook stability
-                verbose=0  # Reduced output for cleaner notebook display
-            )
+            # Optimize learning curve calculation based on model type
+            if model_name == 'one_class_svm':
+                # Use minimal settings for one_class_svm to speed up calculation
+                train_sizes, train_scores, test_scores = learning_curve(
+                    model, X, y,
+                    cv=2,  # Minimal cross-validation
+                    scoring=custom_f1_scorer,
+                    train_sizes=np.linspace(0.4, 1.0, 3),  # Only 3 points with larger starting size
+                    n_jobs=1,  # Single process
+                    verbose=0
+                )
+            else:
+                # Standard settings for other models
+                train_sizes, train_scores, test_scores = learning_curve(
+                    model, X, y,
+                    cv=2,  # Minimal cross-validation for notebooks
+                    scoring=custom_f1_scorer,
+                    train_sizes=np.linspace(0.3, 1.0, 4),  # Fewer points to reduce memory usage
+                    n_jobs=1,  # Single process for notebook stability
+                    verbose=0  # Reduced output for cleaner notebook display
+                )
             
             # Calculate statistics
             train_mean = np.mean(train_scores, axis=1)
