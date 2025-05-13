@@ -13,7 +13,7 @@ import os
 import joblib
 import warnings
 from contextlib import contextmanager
-from memory_profiler import profile
+
 
 # Detect Colab environment and adjust Python path
 if 'google.colab' in sys.modules:
@@ -85,12 +85,18 @@ def handle_large_data(func):
 @handle_large_data
 def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
     """Train or load DBN model with optimized parameters for faster training."""
+    try_load_model = False
     if os.path.exists(DBN_MODEL_PATH):
-        print(f"Loading existing DBN model from {DBN_MODEL_PATH}...")
-        dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
-        dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
-    else:
-        print("No existing DBN model found. Training a new one with optimized parameters...")
+        try:
+            print(f"Loading existing DBN model from {DBN_MODEL_PATH}...")
+            dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
+            dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
+            try_load_model = True
+        except Exception as e:
+            print(f"Error loading existing model, will train new one: {str(e)}")
+    
+    if not try_load_model:
+        print("Training new DBN model with optimized parameters...")
         dbn = DeepBeliefNetwork(
             hidden_layers_sizes=hidden_layers_sizes,
             layer_configs=layer_configs,
@@ -103,9 +109,22 @@ def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
             use_tqdm=True,
             feature_subset_ratio=0.8  # Use 80% of features for faster training
         )
-        dbn.fit(X_train, X_val=X_val)
-        dbn.save_model(DBN_MODEL_PATH)
+        try:
+            dbn.fit(X_train, X_val=X_val)
+            dbn.save_model(DBN_MODEL_PATH)
+        except Exception as e:
+            print(f"Error during model training/saving: {str(e)}")
+            raise
     return dbn
+
+try:
+    from memory_profiler import profile
+    MEMORY_PROFILING_ENABLED = True
+except ImportError:
+    print("Memory profiling disabled - memory_profiler package not installed")
+    MEMORY_PROFILING_ENABLED = False
+    def profile(func):
+        return func
 
 @profile
 def main():
@@ -142,32 +161,7 @@ def main():
     # Train DBN with optimized parameters and memory management
     try:
         with memory_cleanup():
-            # Check if model file exists and is valid
-            try_load_model = False
-            if os.path.exists(DBN_MODEL_PATH):
-                try:
-                    dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
-                    dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
-                    try_load_model = True
-                except Exception as e:
-                    print(f"Error loading existing model, will train new one: {str(e)}")
-            
-            if not try_load_model:
-                print("Training new DBN model...")
-                dbn = DeepBeliefNetwork(
-                    hidden_layers_sizes=hidden_layers_sizes,
-                    layer_configs=layer_configs,
-                    random_state=42,
-                    verbose=1,
-                    checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX,
-                    early_stopping=True,
-                    patience=2,  # Reduced patience for faster convergence
-                    n_jobs=-1,   # Use all available cores
-                    use_tqdm=True,
-                    feature_subset_ratio=0.8  # Use 80% of features for faster training
-                )
-                dbn.fit(X_train_dbn, X_val=X_val_dbn)
-                dbn.save_model(DBN_MODEL_PATH)
+            dbn = train_dbn(X_train_dbn, X_val_dbn, hidden_layers_sizes, layer_configs)
     except Exception as e:
         print(f"Error during DBN training: {str(e)}")
         raise
@@ -255,43 +249,55 @@ def main():
     try:
         with memory_cleanup():
             for config in model_configs:
-        print(f"\nRunning anomaly detection with {config['model_type']}...")
-        detector_params = {'model_type': config['model_type'], **config.get('params', {})}
-        if 'contamination' in config:
-            detector_params['contamination'] = config['contamination']
-        
-        detector_model_path = ANOMALY_DETECTOR_MODEL_PATH_TEMPLATE.format(model_type=config['model_type'])
-        try_load_model = False
-        if os.path.exists(detector_model_path):
-            try:
-                print(f"Loading existing {config['model_type']} anomaly detector from {detector_model_path}...")
-                detector = AnomalyDetector.load_model(detector_model_path)
-                try_load_model = True
-            except Exception as e:
-                print(f"Error loading existing {config['model_type']} model, will train new one: {str(e)}")
-        
-        if not try_load_model:
-            print(f"Training new {config['model_type']} model...")
-            detector = AnomalyDetector(**detector_params)
-            detector.fit(transformed_features)
-            detector.save_model(detector_model_path)
-            
-        anomalies = detector.detect_anomalies(transformed_features)
-        all_anomalies_results[config['model_type']] = anomalies
-        
-        # Calculate metrics
-        precision = precision_score(y_true, anomalies)
-        recall = recall_score(y_true, anomalies)
-        f1 = f1_score(y_true, anomalies)
-        
-        # Store metrics
-        model_metrics[config['model_type']] = {
-            "Precision": precision,
-            "Recall": recall,
-            "F1": f1,
-            "Anomalies_Detected": int(sum(anomalies)),
-            "Anomaly_Percentage": float((sum(anomalies)/len(anomalies))*100)
-        }
+                print(f"\nRunning anomaly detection with {config['model_type']}...")
+                detector_params = {'model_type': config['model_type'], **config.get('params', {})}
+                if 'contamination' in config:
+                    detector_params['contamination'] = config['contamination']
+                
+                detector_model_path = ANOMALY_DETECTOR_MODEL_PATH_TEMPLATE.format(model_type=config['model_type'])
+                try_load_model = False
+                if os.path.exists(detector_model_path):
+                    try:
+                        print(f"Loading existing {config['model_type']} anomaly detector from {detector_model_path}...")
+                        detector = AnomalyDetector.load_model(detector_model_path)
+                        try_load_model = True
+                    except (OSError, EOFError, ValueError) as e:
+                        print(f"Error loading existing {config['model_type']} model (corrupted file), will train new one: {str(e)}")
+                    except Exception as e:
+                        print(f"Unexpected error loading {config['model_type']} model: {str(e)}")
+                
+                if not try_load_model:
+                    print(f"Training new {config['model_type']} model...")
+                    detector = AnomalyDetector(**detector_params)
+                    try:
+                        detector.fit(transformed_features)
+                        detector.save_model(detector_model_path)
+                    except MemoryError:
+                        print(f"Memory error during {config['model_type']} model training. Trying with reduced feature set...")
+                        # Try training with reduced feature set
+                        feature_subset = transformed_features[:, :transformed_features.shape[1]//2]
+                        detector.fit(feature_subset)
+                        detector.save_model(detector_model_path)
+                    except Exception as e:
+                        print(f"Error training/saving {config['model_type']} model: {str(e)}")
+                        raise
+                    
+                anomalies = detector.detect_anomalies(transformed_features)
+                all_anomalies_results[config['model_type']] = anomalies
+                
+                # Calculate metrics
+                precision = precision_score(y_true, anomalies)
+                recall = recall_score(y_true, anomalies)
+                f1 = f1_score(y_true, anomalies)
+                
+                # Store metrics
+                model_metrics[config['model_type']] = {
+                    "Precision": precision,
+                    "Recall": recall,
+                    "F1": f1,
+                    "Anomalies_Detected": int(sum(anomalies)),
+                    "Anomaly_Percentage": float((sum(anomalies)/len(anomalies))*100)
+                }
         
         print(f"Results for {config['model_type']}:")
         print(f"  Precision: {precision:.4f}")
