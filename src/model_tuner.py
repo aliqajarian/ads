@@ -409,6 +409,7 @@ class ModelTuner:
                     # Convert -1 to 1 for anomaly detection
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
+
             
                 # Optimize learning curve calculation based on model type
                 if model_name == 'one_class_svm':
