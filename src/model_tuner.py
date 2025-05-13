@@ -410,7 +410,6 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
 
-            
                 # Optimize learning curve calculation based on model type
                 if model_name == 'one_class_svm':
                     # Use minimal settings for one_class_svm to speed up calculation
@@ -449,34 +448,34 @@ class ModelTuner:
                     'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
             
-            # Print progress
-            print(f"\nLearning curve analysis completed for {model_name}")
-            print(f"  Final train score: {train_mean[-1]:.4f} ± {train_std[-1]:.4f}")
-            print(f"  Final test score: {test_mean[-1]:.4f} ± {test_std[-1]:.4f}")
-            
-            # Save checkpoint after each model
-            checkpoint_data = {
-                'learning_curve_results': learning_curve_results,
-                'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
-                'progress': {
-                    'total_models': len(self.base_models),
-                    'completed_models': len(learning_curve_results),
-                    'remaining_models': len(self.base_models) - len(learning_curve_results)
+                # Print progress
+                print(f"\nLearning curve analysis completed for {model_name}")
+                print(f"  Final train score: {train_mean[-1]:.4f} ± {train_std[-1]:.4f}")
+                print(f"  Final test score: {test_mean[-1]:.4f} ± {test_std[-1]:.4f}")
+                
+                # Save checkpoint after each model
+                checkpoint_data = {
+                    'learning_curve_results': learning_curve_results,
+                    'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
+                    'progress': {
+                        'total_models': len(self.base_models),
+                        'completed_models': len(learning_curve_results),
+                        'remaining_models': len(self.base_models) - len(learning_curve_results)
+                    }
                 }
-            }
-            with open(checkpoint_path, 'w') as f:
-                json.dump(checkpoint_data, f, indent=4)
-            print(f"\nProgress saved to {checkpoint_path}")
-            print(f"Progress: {len(learning_curve_results)}/{len(self.base_models)} models completed")
-            
-            # Save intermediate results file
-            intermediate_results_path = os.path.join(
-                self.results_dir, 
-                f"learning_curves_{model_name}_{self.timestamp}.json"
-            )
-            with open(intermediate_results_path, 'w') as f:
-                json.dump(learning_curve_results[model_name], f, indent=4)
-            print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
+                with open(checkpoint_path, 'w') as f:
+                    json.dump(checkpoint_data, f, indent=4)
+                print(f"\nProgress saved to {checkpoint_path}")
+                print(f"Progress: {len(learning_curve_results)}/{len(self.base_models)} models completed")
+                
+                # Save intermediate results file
+                intermediate_results_path = os.path.join(
+                    self.results_dir, 
+                    f"learning_curves_{model_name}_{self.timestamp}.json"
+                )
+                with open(intermediate_results_path, 'w') as f:
+                    json.dump(learning_curve_results[model_name], f, indent=4)
+                print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
         
         # Save final learning curve results
         self._save_learning_curve_results(learning_curve_results)
