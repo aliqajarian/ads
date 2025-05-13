@@ -256,15 +256,17 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary, zero_division=1)
 
-                # Configure GridSearchCV with notebook-optimized settings
+                # Configure GridSearchCV with optimized parallel processing settings
+                n_jobs = min(os.cpu_count() or 1, 6)  # Use up to 4 cores or available cores
                 grid_search = GridSearchCV(
                     estimator=self.base_models[model_name],
                     param_grid=self.param_grids[model_name],
                     scoring=custom_f1_scorer,
-                    cv=2,  # Reduced CV folds for notebook environment
-                    verbose=0,  # Reduced verbosity for cleaner notebook output
+                    cv=3,  # Increased CV folds for better validation
+                    verbose=1,  # Show progress
                     error_score=0.0,  # Return 0.0 instead of raising error
-                    n_jobs=1  # Single process to avoid memory issues in notebooks
+                    n_jobs=n_jobs,  # Utilize multiple cores for parallel processing
+                    pre_dispatch='2*n_jobs'  # Optimize job pre-dispatching
                 )
                 
                 # Fit the grid search
@@ -387,7 +389,10 @@ class ModelTuner:
             print(f"  - {model_name}")
         
         # Configure parallel processing with optimized settings
-        n_jobs = min(2, os.cpu_count() or 1)  # Limit parallel jobs
+        n_jobs = min(os.cpu_count() or 1, 4)  # Use up to 4 cores or available cores
+        # Set up memory management for parallel processing
+        from joblib import parallel_backend
+        with parallel_backend('threading', n_jobs=n_jobs):
         
         for model_name in models_to_analyze:
             print(f"\nCalculating learning curve for {model_name}...")
