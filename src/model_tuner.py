@@ -393,12 +393,11 @@ class ModelTuner:
         # Set up memory management for parallel processing
         from joblib import parallel_backend
         with parallel_backend('threading', n_jobs=n_jobs):
-        
-        for model_name in models_to_analyze:
-            print(f"\nCalculating learning curve for {model_name}...")
-            
-            # Initialize model from base_models
-            model = self.base_models[model_name]
+            for model_name in models_to_analyze:
+                print(f"\nCalculating learning curve for {model_name}...")
+                
+                # Initialize model from base_models
+                model = self.base_models[model_name]
             
             # Define custom scorer for anomaly detection
             def custom_f1_scorer(estimator, X, y):
