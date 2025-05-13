@@ -438,15 +438,15 @@ class ModelTuner:
                 test_mean = np.mean(test_scores, axis=1)
                 test_std = np.std(test_scores, axis=1)
             
-            # Store results
-            learning_curve_results[model_name] = {
-                'train_sizes': train_sizes.tolist(),
-                'train_mean': train_mean.tolist(),
-                'train_std': train_std.tolist(),
-                'test_mean': test_mean.tolist(),
-                'test_std': test_std.tolist(),
-                'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
+                # Store results
+                learning_curve_results[model_name] = {
+                    'train_sizes': train_sizes.tolist(),
+                    'train_mean': train_mean.tolist(),
+                    'train_std': train_std.tolist(),
+                    'test_mean': test_mean.tolist(),
+                    'test_std': test_std.tolist(),
+                    'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
             
             # Print progress
             print(f"\nLearning curve analysis completed for {model_name}")
