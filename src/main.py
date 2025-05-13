@@ -1,6 +1,7 @@
 from data_loader import DataLoader
 import sys
 import os
+import gc
 from sklearn.metrics import precision_score, recall_score, f1_score
 import json
 from dbn import DeepBeliefNetwork
@@ -10,6 +11,9 @@ from model_tuner import ModelTuner
 import numpy as np
 import os
 import joblib
+import warnings
+from contextlib import contextmanager
+from memory_profiler import profile
 
 # Detect Colab environment and adjust Python path
 if 'google.colab' in sys.modules:
@@ -24,8 +28,8 @@ if 'google.colab' in sys.modules:
         DRIVE_OUTPUT_PATH = "./ads_output"
 else:
     print("Not running in Google Colab. Using local paths.")
-    DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ads/ads_output"
-    #DRIVE_OUTPUT_PATH = "./ads_output"
+    #DRIVE_OUTPUT_PATH = "/content/drive/MyDrive/ads/ads_output"
+    DRIVE_OUTPUT_PATH = "./ads_output"
 
 # Define paths
 DBN_MODEL_PATH = os.path.join(DRIVE_OUTPUT_PATH, "dbn_model.pkl")
@@ -50,6 +54,35 @@ def save_results(results, filepath):
         json.dump(serializable_results, f, indent=4)
     print(f"Results saved to {filepath}")
 
+@contextmanager
+def memory_cleanup():
+    """Context manager for cleaning up memory after operations."""
+    try:
+        yield
+    finally:
+        gc.collect()
+        if 'google.colab' in sys.modules:
+            try:
+                from google.colab import runtime
+                runtime.unassign()
+            except:
+                pass
+
+def handle_large_data(func):
+    """Decorator to handle large data operations safely."""
+    def wrapper(*args, **kwargs):
+        with memory_cleanup():
+            try:
+                return func(*args, **kwargs)
+            except MemoryError:
+                print("Memory error encountered. Try reducing the dataset size or batch size.")
+                raise
+            except Exception as e:
+                print(f"Error in {func.__name__}: {str(e)}")
+                raise
+    return wrapper
+
+@handle_large_data
 def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
     """Train or load DBN model with optimized parameters for faster training."""
     if os.path.exists(DBN_MODEL_PATH):
@@ -74,13 +107,23 @@ def train_dbn(X_train, X_val, hidden_layers_sizes, layer_configs):
         dbn.save_model(DBN_MODEL_PATH)
     return dbn
 
+@profile
 def main():
     # Initialize data loader
     data_loader = DataLoader()
     
-    # Load and prepare data with reduced dataset size for faster training
-    print("Loading data (limited to 250k records for faster training)...")
-    df = data_loader.load_data(max_records=250000, use_full_dataset=False)  # Reduced from 500k to 100k
+    # Configure warnings and memory settings
+    warnings.filterwarnings('ignore', category=UserWarning)
+    warnings.filterwarnings('ignore', category=FutureWarning)
+    
+    # Load and prepare data with dynamic batch sizing
+    print("Loading data with optimized batch size...")
+    try:
+        max_records = 100000 if 'google.colab' in sys.modules else 250000
+        df = data_loader.load_data(max_records=max_records, use_full_dataset=False)
+    except MemoryError:
+        print("Memory limit reached. Reducing dataset size...")
+        df = data_loader.load_data(max_records=50000, use_full_dataset=False)
     features = data_loader.prepare_features(df)
 
     # Split data for DBN training and validation
@@ -96,24 +139,70 @@ def main():
     hidden_layers_sizes = [min(X_train_dbn.shape[1] // 2, X_train_dbn.shape[1]), 
                           min(X_train_dbn.shape[1] // 4, X_train_dbn.shape[1] // 2)]
 
-    # Train DBN with optimized parameters
-    dbn = train_dbn(X_train_dbn, X_val_dbn, hidden_layers_sizes, layer_configs)
+    # Train DBN with optimized parameters and memory management
+    try:
+        with memory_cleanup():
+            # Check if model file exists and is valid
+            try_load_model = False
+            if os.path.exists(DBN_MODEL_PATH):
+                try:
+                    dbn = DeepBeliefNetwork.load_model(DBN_MODEL_PATH)
+                    dbn.checkpoint_path_prefix = RBM_CHECKPOINT_PATH_PREFIX
+                    try_load_model = True
+                except Exception as e:
+                    print(f"Error loading existing model, will train new one: {str(e)}")
+            
+            if not try_load_model:
+                print("Training new DBN model...")
+                dbn = DeepBeliefNetwork(
+                    hidden_layers_sizes=hidden_layers_sizes,
+                    layer_configs=layer_configs,
+                    random_state=42,
+                    verbose=1,
+                    checkpoint_path_prefix=RBM_CHECKPOINT_PATH_PREFIX,
+                    early_stopping=True,
+                    patience=2,  # Reduced patience for faster convergence
+                    n_jobs=-1,   # Use all available cores
+                    use_tqdm=True,
+                    feature_subset_ratio=0.8  # Use 80% of features for faster training
+                )
+                dbn.fit(X_train_dbn, X_val=X_val_dbn)
+                dbn.save_model(DBN_MODEL_PATH)
+    except Exception as e:
+        print(f"Error during DBN training: {str(e)}")
+        raise
     
-    # Transform the full feature set using the trained DBN
-    transformed_features = dbn.transform(features)
+    # Transform features with memory optimization
+    try:
+        with memory_cleanup():
+            transformed_features = dbn.transform(features)
+            del features  # Free up memory
+            gc.collect()
+    except Exception as e:
+        print(f"Error during feature transformation: {str(e)}")
+        raise
     
     # Assuming we have some ground truth labels
     y_true = np.zeros(len(transformed_features))
     y_true[:int(len(y_true) * 0.1)] = 1  # Assuming 10% are anomalies
     
-    # Initialize model tuner
-    model_tuner = ModelTuner(DRIVE_OUTPUT_PATH)
-    
-    # Perform hyperparameter tuning
-    best_params, tuning_results = model_tuner.tune_models(transformed_features, y_true)
-    
-    # Analyze learning curves
-    learning_curve_results = model_tuner.analyze_learning_curves(transformed_features, y_true)
+    # Initialize model tuner with memory management
+    try:
+        with memory_cleanup():
+            model_tuner = ModelTuner(DRIVE_OUTPUT_PATH)
+            
+            # Perform hyperparameter tuning with progress tracking
+            print("\nStarting hyperparameter tuning with memory optimization...")
+            best_params, tuning_results = model_tuner.tune_models(transformed_features, y_true)
+            
+            # Clean up memory before learning curve analysis
+            gc.collect()
+            
+            print("\nAnalyzing learning curves with memory optimization...")
+            learning_curve_results = model_tuner.analyze_learning_curves(transformed_features, y_true)
+    except Exception as e:
+        print(f"Error during model tuning or learning curve analysis: {str(e)}")
+        raise
     
     # Update model configs with best parameters
     model_configs = [
@@ -159,21 +248,30 @@ def main():
         }
     ]
 
+    # Initialize results containers and manage memory during model evaluation
     all_anomalies_results = {}
     model_metrics = {}
-
-    for config in model_configs:
+    
+    try:
+        with memory_cleanup():
+            for config in model_configs:
         print(f"\nRunning anomaly detection with {config['model_type']}...")
         detector_params = {'model_type': config['model_type'], **config.get('params', {})}
         if 'contamination' in config:
             detector_params['contamination'] = config['contamination']
         
         detector_model_path = ANOMALY_DETECTOR_MODEL_PATH_TEMPLATE.format(model_type=config['model_type'])
+        try_load_model = False
         if os.path.exists(detector_model_path):
-            print(f"Loading existing {config['model_type']} anomaly detector from {detector_model_path}...")
-            detector = AnomalyDetector.load_model(detector_model_path)
-        else:
-            print(f"No existing {config['model_type']} model found. Training a new one...")
+            try:
+                print(f"Loading existing {config['model_type']} anomaly detector from {detector_model_path}...")
+                detector = AnomalyDetector.load_model(detector_model_path)
+                try_load_model = True
+            except Exception as e:
+                print(f"Error loading existing {config['model_type']} model, will train new one: {str(e)}")
+        
+        if not try_load_model:
+            print(f"Training new {config['model_type']} model...")
             detector = AnomalyDetector(**detector_params)
             detector.fit(transformed_features)
             detector.save_model(detector_model_path)
@@ -198,6 +296,15 @@ def main():
         print(f"Results for {config['model_type']}:")
         print(f"  Precision: {precision:.4f}")
         print(f"  Recall: {recall:.4f}")
+        
+        # Clean up memory after each model evaluation
+        gc.collect()
+    except Exception as e:
+        print(f"Error during anomaly detection: {str(e)}")
+        raise
+    finally:
+        # Final memory cleanup
+        gc.collect()
         print(f"  F1 Score: {f1:.4f}")
         print(f"  Anomalies detected: {sum(anomalies)}")
         print(f"  Anomaly percentage: {(sum(anomalies)/len(anomalies))*100:.2f}%")

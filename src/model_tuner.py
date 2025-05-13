@@ -256,22 +256,15 @@ class ModelTuner:
                     y_pred_binary = np.where(y_pred == -1, 1, 0)
                     return f1_score(y, y_pred_binary, zero_division=1)
 
-                # Configure parallel processing with optimized settings and resource management
-                n_jobs = min(2, os.cpu_count() or 1)  # Reduce parallel jobs to minimize resource usage
-                temp_folder = os.path.join(self.output_dir, 'joblib_temp')
-                os.makedirs(temp_folder, exist_ok=True)
-                
-                # Configure GridSearchCV with resource-efficient settings
+                # Configure GridSearchCV with notebook-optimized settings
                 grid_search = GridSearchCV(
                     estimator=self.base_models[model_name],
                     param_grid=self.param_grids[model_name],
                     scoring=custom_f1_scorer,
-                    cv=3,  # Use 3-fold CV for efficiency
-                    verbose=1,
-                    error_score='raise',
-                    n_jobs=n_jobs,
-                    pre_dispatch='1*n_jobs',  # Reduce job dispatching to prevent resource leaks
-                    max_nbytes=None  # Disable memory caching to prevent leaks
+                    cv=2,  # Reduced CV folds for notebook environment
+                    verbose=0,  # Reduced verbosity for cleaner notebook output
+                    error_score=0.0,  # Return 0.0 instead of raising error
+                    n_jobs=1  # Single process to avoid memory issues in notebooks
                 )
                 
                 # Fit the grid search
@@ -413,14 +406,14 @@ class ModelTuner:
                 y_pred_binary = np.where(y_pred == -1, 1, 0)
                 return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
             
-            # Calculate learning curve with optimized settings
+            # Calculate learning curve with notebook-optimized settings
             train_sizes, train_scores, test_scores = learning_curve(
                 model, X, y,
-                cv=3,  # Reduced from 5 to 3 folds
+                cv=2,  # Minimal cross-validation for notebooks
                 scoring=custom_f1_scorer,
-                train_sizes=np.linspace(0.2, 1.0, 5),  # Reduced points and starting from 20%
-                n_jobs=n_jobs,
-                pre_dispatch='1*n_jobs'  # Control memory usage
+                train_sizes=np.linspace(0.3, 1.0, 4),  # Fewer points to reduce memory usage
+                n_jobs=1,  # Single process for notebook stability
+                verbose=0  # Reduced output for cleaner notebook display
             )
             
             # Calculate statistics
