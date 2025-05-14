@@ -233,11 +233,12 @@ def main():
             }
         },
         {
-            'model_type': 'dbscan',
+            'model_type': 'birch',
             'params': {
-                'dbscan_eps': best_params['dbscan']['eps'],
-                'dbscan_min_samples': best_params['dbscan']['min_samples'],
-                'metric': best_params['dbscan']['metric']
+                'threshold': best_params['birch']['threshold'],
+                'branching_factor': best_params['birch']['branching_factor'],
+                'n_clusters': best_params['birch']['n_clusters'],
+                'compute_labels': best_params['birch']['compute_labels']
             }
         }
     ]
