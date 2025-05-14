@@ -312,10 +312,44 @@ class ModelTuner:
             if metrics['roc_auc'] is not None:
                 print(f"    - ROC AUC: {metrics['roc_auc']:.4f}")
             
-            # Save checkpoint after each model
+            # Save checkpoint after each model with proper serialization and error handling
+            # First serialize numpy values to make them JSON compatible
+            serializable_tuning_results = {}
+            for model_key, model_result in tuning_results.items():
+                serializable_tuning_results[model_key] = {}
+                for result_key, result_value in model_result.items():
+                    if result_key == 'all_results':
+                        # Handle nested dictionary with arrays
+                        serializable_tuning_results[model_key]['all_results'] = {
+                            'mean_test_score': [float(score) if isinstance(score, (np.float32, np.float64)) else score 
+                                               for score in model_result['all_results']['mean_test_score']],
+                            'params': model_result['all_results']['params']
+                        }
+                    elif isinstance(result_value, (np.float32, np.float64, np.int32, np.int64)):
+                        # Convert numpy scalars to native Python types
+                        serializable_tuning_results[model_key][result_key] = float(result_value) if isinstance(result_value, (np.float32, np.float64)) else int(result_value)
+                    elif isinstance(result_value, dict) and 'precision' in result_value:
+                        # Handle metrics dictionary
+                        serializable_tuning_results[model_key][result_key] = {
+                            k: float(v) if isinstance(v, (np.float32, np.float64)) else v
+                            for k, v in result_value.items()
+                        }
+                    else:
+                        serializable_tuning_results[model_key][result_key] = result_value
+            
+            # Serialize best_params
+            serializable_best_params = {}
+            for model_name, params in best_params.items():
+                serializable_best_params[model_name] = {}
+                for param_name, param_value in params.items():
+                    if isinstance(param_value, (np.float32, np.float64, np.int32, np.int64)):
+                        serializable_best_params[model_name][param_name] = float(param_value) if isinstance(param_value, (np.float32, np.float64)) else int(param_value)
+                    else:
+                        serializable_best_params[model_name][param_name] = param_value
+            
             checkpoint_data = {
-                'tuning_results': tuning_results,
-                'best_params': best_params,
+                'tuning_results': serializable_tuning_results,
+                'best_params': serializable_best_params,
                 'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
                 'progress': {
                     'total_models': len(self.base_models),
@@ -323,19 +357,68 @@ class ModelTuner:
                     'remaining_models': len(self.base_models) - len(tuning_results)
                 }
             }
-            with open(checkpoint_path, 'w') as f:
-                json.dump(checkpoint_data, f, indent=4)
-            print(f"\nProgress saved to {checkpoint_path}")
-            print(f"Progress: {len(tuning_results)}/{len(self.base_models)} models completed")
             
-            # Save intermediate results file
+            try:
+                with open(checkpoint_path, 'w') as f:
+                    json.dump(checkpoint_data, f, indent=4)
+                print(f"\nProgress saved to {checkpoint_path}")
+                print(f"Progress: {len(tuning_results)}/{len(self.base_models)} models completed")
+            except (IOError, json.JSONDecodeError) as e:
+                print(f"Error saving checkpoint: {e}")
+                # Try saving to an alternative location
+                alt_checkpoint_path = os.path.join(self.results_dir, f"tuning_checkpoint_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                try:
+                    with open(alt_checkpoint_path, 'w') as f:
+                        json.dump(checkpoint_data, f, indent=4)
+                    print(f"Saved backup checkpoint to {alt_checkpoint_path}")
+                except Exception as e2:
+                    print(f"Failed to save backup checkpoint: {e2}")
+            
+            # Save intermediate results file with proper serialization and error handling
             intermediate_results_path = os.path.join(
                 self.results_dir, 
                 f"tuning_results_{model_name}_{self.timestamp}.json"
             )
-            with open(intermediate_results_path, 'w') as f:
-                json.dump(tuning_results[model_name], f, indent=4)
-            print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
+            
+            # Serialize model results to make them JSON compatible
+            serializable_model_results = {}
+            for key, value in tuning_results[model_name].items():
+                if key == 'all_results':
+                    # Handle nested dictionary with arrays
+                    serializable_model_results['all_results'] = {
+                        'mean_test_score': [float(score) if isinstance(score, (np.float32, np.float64)) else score 
+                                           for score in tuning_results[model_name]['all_results']['mean_test_score']],
+                        'params': tuning_results[model_name]['all_results']['params']
+                    }
+                elif isinstance(value, (np.float32, np.float64, np.int32, np.int64)):
+                    # Convert numpy scalars to native Python types
+                    serializable_model_results[key] = float(value) if isinstance(value, (np.float32, np.float64)) else int(value)
+                elif isinstance(value, dict) and 'precision' in value:
+                    # Handle metrics dictionary
+                    serializable_model_results[key] = {
+                        k: float(v) if isinstance(v, (np.float32, np.float64)) else v
+                        for k, v in value.items()
+                    }
+                else:
+                    serializable_model_results[key] = value
+            
+            try:
+                with open(intermediate_results_path, 'w') as f:
+                    json.dump(serializable_model_results, f, indent=4)
+                print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
+            except (IOError, json.JSONDecodeError) as e:
+                print(f"Error saving intermediate results for {model_name}: {e}")
+                # Try saving to an alternative location
+                alt_results_path = os.path.join(
+                    self.results_dir, 
+                    f"tuning_results_{model_name}_{self.timestamp}_backup.json"
+                )
+                try:
+                    with open(alt_results_path, 'w') as f:
+                        json.dump(serializable_model_results, f, indent=4)
+                    print(f"Saved backup results to {alt_results_path}")
+                except Exception as e2:
+                    print(f"Failed to save backup results: {e2}")
         
         # Save final tuning results
         self._save_tuning_results(tuning_results)
@@ -470,9 +553,27 @@ class ModelTuner:
                 print(f"  Final train score: {train_mean[-1]:.4f} ± {train_std[-1]:.4f}")
                 print(f"  Final test score: {test_mean[-1]:.4f} ± {test_std[-1]:.4f}")
                 
-                # Save checkpoint after each model
+                # Save checkpoint after each model with proper serialization and error handling
+                # First serialize numpy values to make them JSON compatible
+                serializable_learning_curve_results = {}
+                for model_name, results in learning_curve_results.items():
+                    serializable_learning_curve_results[model_name] = {}
+                    for key, value in results.items():
+                        if isinstance(value, (list, np.ndarray)):
+                            # Convert numpy arrays to lists and ensure all elements are native Python types
+                            serializable_learning_curve_results[model_name][key] = [
+                                float(x) if isinstance(x, (np.float32, np.float64)) else 
+                                int(x) if isinstance(x, (np.int32, np.int64)) else x 
+                                for x in value
+                            ]
+                        elif isinstance(value, (np.float32, np.float64, np.int32, np.int64)):
+                            # Convert numpy scalars to native Python types
+                            serializable_learning_curve_results[model_name][key] = float(value) if isinstance(value, (np.float32, np.float64)) else int(value)
+                        else:
+                            serializable_learning_curve_results[model_name][key] = value
+                
                 checkpoint_data = {
-                    'learning_curve_results': learning_curve_results,
+                    'learning_curve_results': serializable_learning_curve_results,
                     'timestamp': datetime.now().strftime("%Y%m%d_%H%M%S"),
                     'progress': {
                         'total_models': len(self.base_models),
@@ -480,19 +581,62 @@ class ModelTuner:
                         'remaining_models': len(self.base_models) - len(learning_curve_results)
                     }
                 }
-                with open(checkpoint_path, 'w') as f:
-                    json.dump(checkpoint_data, f, indent=4)
-                print(f"\nProgress saved to {checkpoint_path}")
-                print(f"Progress: {len(learning_curve_results)}/{len(self.base_models)} models completed")
                 
-                # Save intermediate results file
+                try:
+                    with open(checkpoint_path, 'w') as f:
+                        json.dump(checkpoint_data, f, indent=4)
+                    print(f"\nProgress saved to {checkpoint_path}")
+                    print(f"Progress: {len(learning_curve_results)}/{len(self.base_models)} models completed")
+                except (IOError, json.JSONDecodeError) as e:
+                    print(f"Error saving checkpoint: {e}")
+                    # Try saving to an alternative location
+                    alt_checkpoint_path = os.path.join(self.results_dir, f"learning_curves_checkpoint_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    try:
+                        with open(alt_checkpoint_path, 'w') as f:
+                            json.dump(checkpoint_data, f, indent=4)
+                        print(f"Saved backup checkpoint to {alt_checkpoint_path}")
+                    except Exception as e2:
+                        print(f"Failed to save backup checkpoint: {e2}")
+                
+                # Save intermediate learning curve results file with proper serialization and error handling
                 intermediate_results_path = os.path.join(
                     self.results_dir, 
                     f"learning_curves_{model_name}_{self.timestamp}.json"
                 )
-                with open(intermediate_results_path, 'w') as f:
-                    json.dump(learning_curve_results[model_name], f, indent=4)
-                print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
+                
+                # Serialize model results to make them JSON compatible
+                serializable_model_results = {}
+                for key, value in learning_curve_results[model_name].items():
+                    if isinstance(value, (list, np.ndarray)):
+                        # Convert numpy arrays to lists and ensure all elements are native Python types
+                        serializable_model_results[key] = [
+                            float(x) if isinstance(x, (np.float32, np.float64)) else 
+                            int(x) if isinstance(x, (np.int32, np.int64)) else x 
+                            for x in value
+                        ]
+                    elif isinstance(value, (np.float32, np.float64, np.int32, np.int64)):
+                        # Convert numpy scalars to native Python types
+                        serializable_model_results[key] = float(value) if isinstance(value, (np.float32, np.float64)) else int(value)
+                    else:
+                        serializable_model_results[key] = value
+                
+                try:
+                    with open(intermediate_results_path, 'w') as f:
+                        json.dump(serializable_model_results, f, indent=4)
+                    print(f"Detailed results for {model_name} saved to {intermediate_results_path}")
+                except (IOError, json.JSONDecodeError) as e:
+                    print(f"Error saving intermediate learning curve results for {model_name}: {e}")
+                    # Try saving to an alternative location
+                    alt_results_path = os.path.join(
+                        self.results_dir, 
+                        f"learning_curves_{model_name}_{self.timestamp}_backup.json"
+                    )
+                    try:
+                        with open(alt_results_path, 'w') as f:
+                            json.dump(serializable_model_results, f, indent=4)
+                        print(f"Saved backup learning curve results to {alt_results_path}")
+                    except Exception as e2:
+                        print(f"Failed to save backup learning curve results: {e2}")
         
         # Save final learning curve results
         self._save_learning_curve_results(learning_curve_results)
@@ -500,17 +644,51 @@ class ModelTuner:
         return learning_curve_results
 
     def _save_tuning_results(self, results):
-        """Save tuning results to JSON and CSV files."""
+        """Save tuning results to JSON and CSV files with proper serialization and error handling."""
         # Save detailed results to JSON
         json_path = os.path.join(self.results_dir, f"tuning_results_final_{self.timestamp}.json")
         
-        # Use context managers for file operations
+        # Serialize results to make them JSON compatible
+        serializable_results = {}
+        for model_key, model_result in results.items():
+            serializable_results[model_key] = {}
+            for result_key, result_value in model_result.items():
+                if result_key == 'all_results':
+                    # Handle nested dictionary with arrays
+                    serializable_results[model_key]['all_results'] = {
+                        'mean_test_score': [float(score) if isinstance(score, (np.float32, np.float64)) else score 
+                                           for score in model_result['all_results']['mean_test_score']],
+                        'params': model_result['all_results']['params']
+                    }
+                elif isinstance(result_value, (np.float32, np.float64, np.int32, np.int64)):
+                    # Convert numpy scalars to native Python types
+                    serializable_results[model_key][result_key] = float(result_value) if isinstance(result_value, (np.float32, np.float64)) else int(result_value)
+                elif isinstance(result_value, dict) and 'precision' in result_value:
+                    # Handle metrics dictionary
+                    serializable_results[model_key][result_key] = {
+                        k: float(v) if isinstance(v, (np.float32, np.float64)) else v
+                        for k, v in result_value.items()
+                    }
+                else:
+                    serializable_results[model_key][result_key] = result_value
+        
+        # Use context managers for file operations with better error handling
         try:
             with open(json_path, 'w') as f:
-                json.dump(results, f, indent=4)
+                json.dump(serializable_results, f, indent=4)
+            print(f"Tuning results saved to {json_path}")
         except IOError as e:
             print(f"Error saving tuning results to JSON: {e}")
-            return
+            # Try saving to an alternative location
+            alt_json_path = os.path.join(self.results_dir, f"tuning_results_final_{self.timestamp}_backup.json")
+            try:
+                with open(alt_json_path, 'w') as f:
+                    json.dump(serializable_results, f, indent=4)
+                print(f"Saved backup tuning results to {alt_json_path}")
+                json_path = alt_json_path  # Use the backup path for CSV reference
+            except Exception as e2:
+                print(f"Failed to save backup tuning results: {e2}")
+                return
             
         # Create summary DataFrame
         summary_data = []
@@ -545,11 +723,45 @@ class ModelTuner:
             print(f"  Completed: {row['Completion_Time']}")
 
     def _save_learning_curve_results(self, results):
-        """Save learning curve results to JSON and CSV files."""
+        """Save learning curve results to JSON and CSV files with proper serialization and error handling."""
         # Save detailed results to JSON
         json_path = os.path.join(self.results_dir, f"learning_curves_final_{self.timestamp}.json")
-        with open(json_path, 'w') as f:
-            json.dump(results, f, indent=4)
+        
+        # Serialize results to make them JSON compatible
+        serializable_results = {}
+        for model_name, model_results in results.items():
+            serializable_results[model_name] = {}
+            for key, value in model_results.items():
+                if isinstance(value, (list, np.ndarray)):
+                    # Convert numpy arrays to lists and ensure all elements are native Python types
+                    serializable_results[model_name][key] = [
+                        float(x) if isinstance(x, (np.float32, np.float64)) else 
+                        int(x) if isinstance(x, (np.int32, np.int64)) else x 
+                        for x in value
+                    ]
+                elif isinstance(value, (np.float32, np.float64, np.int32, np.int64)):
+                    # Convert numpy scalars to native Python types
+                    serializable_results[model_name][key] = float(value) if isinstance(value, (np.float32, np.float64)) else int(value)
+                else:
+                    serializable_results[model_name][key] = value
+        
+        # Use context managers for file operations with better error handling
+        try:
+            with open(json_path, 'w') as f:
+                json.dump(serializable_results, f, indent=4)
+            print(f"Learning curve results saved to {json_path}")
+        except IOError as e:
+            print(f"Error saving learning curve results to JSON: {e}")
+            # Try saving to an alternative location
+            alt_json_path = os.path.join(self.results_dir, f"learning_curves_final_{self.timestamp}_backup.json")
+            try:
+                with open(alt_json_path, 'w') as f:
+                    json.dump(serializable_results, f, indent=4)
+                print(f"Saved backup learning curve results to {alt_json_path}")
+                json_path = alt_json_path  # Use the backup path for CSV reference
+            except Exception as e2:
+                print(f"Failed to save backup learning curve results: {e2}")
+                return
         
         # Create summary DataFrame
         summary_data = []
