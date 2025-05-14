@@ -312,9 +312,6 @@ def main():
     finally:
         # Final memory cleanup
         gc.collect()
-        print(f"  F1 Score: {f1:.4f}")
-        print(f"  Anomalies detected: {sum(anomalies)}")
-        print(f"  Anomaly percentage: {(sum(anomalies)/len(anomalies))*100:.2f}%")
 
     # Save results to file
     save_results(model_metrics, RESULTS_PATH)
