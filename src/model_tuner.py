@@ -412,15 +412,32 @@ class ModelTuner:
 
                 # Optimize learning curve calculation based on model type
                 if model_name == 'one_class_svm':
-                    # Use minimal settings for one_class_svm to speed up calculation
-                    train_sizes, train_scores, test_scores = learning_curve(
-                        model, X, y,
-                        cv=2,  # Minimal cross-validation
-                        scoring=custom_f1_scorer,
-                        train_sizes=np.linspace(0.4, 1.0, 3),  # Only 3 points with larger starting size
-                        n_jobs=1,  # Single process
-                        verbose=0
-                    )
+                    try:
+                        print(f"  - Starting one_class_svm learning curve calculation with {X.shape[0]} samples...")
+                        # Use minimal settings for one_class_svm to speed up calculation
+                        train_sizes, train_scores, test_scores = learning_curve(
+                            model, X, y,
+                            cv=2,  # Minimal cross-validation
+                            scoring=custom_f1_scorer,
+                            train_sizes=np.linspace(0.4, 1.0, 3),  # Only 3 points with larger starting size
+                            n_jobs=1,  # Single process
+                            verbose=1,  # Enable progress tracking
+                            error_score='raise'  # Raise errors instead of returning NaN
+                        )
+                        print("  - Successfully completed one_class_svm learning curve calculation")
+                    except Exception as e:
+                        print(f"Error calculating learning curve for one_class_svm: {str(e)}")
+                        # Initialize empty results for failed calculation
+                        train_sizes = np.array([])
+                        train_scores = np.array([])
+                        test_scores = np.array([])
+                        # Save error information
+                        learning_curve_results[model_name] = {
+                            'error': str(e),
+                            'status': 'failed',
+                            'completion_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        continue  # Skip to next model
                 else:
                     # Standard settings for other models
                     train_sizes, train_scores, test_scores = learning_curve(
