@@ -428,15 +428,6 @@ def main():
                 'hbos_n_bins': best_params['hbos']['n_bins'],
                 'hbos_alpha': best_params['hbos']['alpha']
             }
-        },
-        {
-            'model_type': 'birch',
-            'params': {
-                'threshold': best_params['birch']['threshold'],
-                'branching_factor': best_params['birch']['branching_factor'],
-                'n_clusters': best_params['birch']['n_clusters'],
-                'compute_labels': best_params['birch']['compute_labels']
-            }
         }
     ]
 
@@ -520,10 +511,6 @@ def main():
                         detector_params['hbos_n_bins'] = config['params']['hbos_n_bins']
                     if 'hbos_alpha' in config['params']:
                         detector_params['hbos_alpha'] = config['params']['hbos_alpha']
-                elif config['model_type'] == 'birch':
-                    # Birch parameters are not directly passed to AnomalyDetector constructor
-                    # They will be handled internally by the AnomalyDetector class
-                    pass
                 
                 # Check if this model has already been processed by looking at detection state
                 if config['model_type'] in detection_state.get('completed_models', []):
