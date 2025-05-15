@@ -646,36 +646,50 @@ def main():
     os.makedirs(correlation_output_path, exist_ok=True)
     os.makedirs(learning_curves_path, exist_ok=True)
     
-    # Plot behavioral features correlation
-    print("\nGenerating behavioral features correlation heatmap...")
-    correlation_save_path = os.path.join(correlation_output_path, "behavioral_features_correlation.png")
-    visualizer.plot_behavioral_features_correlation(df, save_path=correlation_save_path)
-    
-    # Plot learning curves for model sensitivity analysis
-    print("\nGenerating learning curves for model sensitivity analysis...")
-    learning_curves_save_path = os.path.join(learning_curves_path, "model_learning_curves.png")
-    visualizer.plot_learning_curves(transformed_features, y_true, save_path=learning_curves_save_path)
-    
-    # Plot other visualizations
-    visualizer.plot_rating_distribution(df)
-    visualizer.plot_review_length_vs_rating(df)
-    
-    # Plot t-SNE visualization for each model's results
-    for model_type, anomalies in all_anomalies_results.items():
-        print(f"\nGenerating t-SNE visualization for {model_type}...")
-        tsne_save_path = os.path.join(tsne_output_path, f"tsne_{model_type}.png")
-        visualizer.plot_tsne_features(transformed_features, anomalies, save_path=tsne_save_path)
-    
-    # Plot anomaly distribution for the first model as an example
-    if 'isolation_forest' in all_anomalies_results:
-        visualizer.plot_anomaly_distribution(df, all_anomalies_results['isolation_forest'])
-    elif all_anomalies_results:
-        first_model_key = list(all_anomalies_results.keys())[0]
-        visualizer.plot_anomaly_distribution(df, all_anomalies_results[first_model_key])
+    try:
+        # Plot behavioral features correlation
+        print("\nGenerating behavioral features correlation heatmap...")
+        correlation_save_path = os.path.join(correlation_output_path, "behavioral_features_correlation.png")
+        visualizer.plot_behavioral_features_correlation(df, save_path=correlation_save_path)
         
-    visualizer.plot_dbn_layer_scores(dbn.layer_scores_)
-    visualizer.plot_model_comparison(all_anomalies_results)
-    
+        # Plot learning curves for model sensitivity analysis
+        print("\nGenerating learning curves for model sensitivity analysis...")
+        learning_curves_save_path = os.path.join(learning_curves_path, "model_learning_curves.png")
+        visualizer.plot_learning_curves(transformed_features, y_true, save_path=learning_curves_save_path)
+        
+        # Plot other visualizations
+        print("\nGenerating rating distribution plot...")
+        visualizer.plot_rating_distribution(df)
+        
+        print("\nGenerating review length vs rating plot...")
+        visualizer.plot_review_length_vs_rating(df)
+        
+        # Plot t-SNE visualization for each model's results
+        print("\nGenerating t-SNE visualizations for each model...")
+        for model_type, anomalies in all_anomalies_results.items():
+            print(f"\nGenerating t-SNE visualization for {model_type}...")
+            tsne_save_path = os.path.join(tsne_output_path, f"tsne_{model_type}.png")
+            visualizer.plot_tsne_features(transformed_features, anomalies, save_path=tsne_save_path)
+        
+        # Plot anomaly distribution for the first model as an example
+        print("\nGenerating anomaly distribution plot...")
+        if 'isolation_forest' in all_anomalies_results:
+            visualizer.plot_anomaly_distribution(df, all_anomalies_results['isolation_forest'])
+        elif all_anomalies_results:
+            first_model_key = list(all_anomalies_results.keys())[0]
+            visualizer.plot_anomaly_distribution(df, all_anomalies_results[first_model_key])
+        
+        print("\nGenerating DBN layer scores plot...")
+        visualizer.plot_dbn_layer_scores(dbn.layer_scores_)
+        
+        print("\nGenerating model comparison plot...")
+        visualizer.plot_model_comparison(all_anomalies_results)
+        
+    except Exception as e:
+        print(f"Error during visualization generation: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
     # Print summary
     print(f"\nTotal reviews analyzed: {len(df)}")
     for model_type, metrics in model_metrics.items():
