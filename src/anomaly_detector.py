@@ -32,6 +32,10 @@ class AnomalyDetector:
         self.has_features = False  # Whether the model has been fitted with valid features
         self.has_variance = False  # Whether the features have sufficient variance
         self.original_n_features = None  # Original number of features before processing
+        
+        # Initialize zero variance handling attributes
+        self.non_zero_variance_mask = None  # Mask for features with non-zero variance
+        self.added_noise = False  # Whether noise was added to create variance
 
         if model_type == 'isolation_forest':
             self.detector = IsolationForest(contamination=contamination, random_state=42)
@@ -51,26 +55,53 @@ class AnomalyDetector:
             raise ValueError(f"Unknown model_type: {model_type}. Supported types: 'isolation_forest', 'lof', 'one_class_svm', 'dbscan', 'hbos'")
     
     def fit(self, features):
-        # Check if features array is empty or has zero variance
+        # Check if features array is empty
         if features.size == 0:
             print("Warning: Empty feature array provided to AnomalyDetector.fit()")
             self.has_features = False
             return
             
         try:
-            # Try to remove zero-variance features
-            features_transformed = self.variance_threshold.fit_transform(features)
+            # Store original feature shape for reference
+            self.original_n_features = features.shape[1]
             
-            # Check if any features remain after variance thresholding
-            if features_transformed.size == 0 or features_transformed.shape[1] == 0:
-                print("Warning: No features meet the variance threshold. Using original features instead.")
-                # Store original feature shape for reference
-                self.original_n_features = features.shape[1]
-                # Skip variance thresholding if no features meet the threshold
-                features_transformed = features
+            # Check for zero variance features before applying threshold
+            feature_variances = np.var(features, axis=0)
+            non_zero_variance_mask = feature_variances > 0
+            non_zero_variance_count = np.sum(non_zero_variance_mask)
+            
+            if non_zero_variance_count == 0:
+                print("Warning: All features have zero variance. Using original features with a small epsilon added.")
+                # Add small random noise to create variance when all features have zero variance
+                epsilon = 1e-8
+                features = features + np.random.normal(0, epsilon, size=features.shape)
                 self.has_variance = False
+                features_transformed = features
+                # Store the fact that we added noise
+                self.added_noise = True
             else:
-                self.has_variance = True
+                # Try to apply variance threshold normally
+                try:
+                    features_transformed = self.variance_threshold.fit_transform(features)
+                    
+                    # Check if any features remain after variance thresholding
+                    if features_transformed.size == 0 or features_transformed.shape[1] == 0:
+                        print("Warning: No features meet the variance threshold. Using features with non-zero variance.")
+                        # Use only features with non-zero variance instead of all original features
+                        features_transformed = features[:, non_zero_variance_mask]
+                        self.non_zero_variance_mask = non_zero_variance_mask  # Store mask for prediction
+                        self.has_variance = False
+                    else:
+                        self.has_variance = True
+                        self.non_zero_variance_mask = None  # Not needed when threshold works
+                except ValueError as ve:
+                    print(f"Variance threshold error: {str(ve)}. Using features with non-zero variance.")
+                    # Use only features with non-zero variance
+                    features_transformed = features[:, non_zero_variance_mask]
+                    self.non_zero_variance_mask = non_zero_variance_mask  # Store mask for prediction
+                    self.has_variance = False
+                    
+                self.added_noise = False
                 
             # Scale the features
             scaled_features = self.scaler.fit_transform(features_transformed)
@@ -82,7 +113,7 @@ class AnomalyDetector:
             else:
                 self.scaled_features_for_dbscan_ = scaled_features
                 
-        except ValueError as e:
+        except Exception as e:
             print(f"Error during feature processing in fit(): {str(e)}")
             # Set flags to indicate the error state
             self.has_features = False
@@ -97,13 +128,25 @@ class AnomalyDetector:
             return np.zeros(features.shape[0], dtype=bool)  # Return all as normal (non-anomalies)
             
         try:
-            # Handle the case where variance threshold was skipped during fit
-            if hasattr(self, 'has_variance') and not self.has_variance:
-                # Skip variance thresholding if it was skipped during fit
+            # Apply the same preprocessing steps as during fit
+            if hasattr(self, 'added_noise') and self.added_noise:
+                # Add the same small noise as during training if we had to do that
+                epsilon = 1e-8
+                features = features + np.random.normal(0, epsilon, size=features.shape)
+                features_transformed = features
+            elif hasattr(self, 'non_zero_variance_mask') and self.non_zero_variance_mask is not None:
+                # Use the same non-zero variance feature mask as during training
+                features_transformed = features[:, self.non_zero_variance_mask]
+            elif hasattr(self, 'has_variance') and not self.has_variance:
+                # For backward compatibility with older models
                 features_transformed = features
             else:
-                # Apply variance threshold transformation
-                features_transformed = self.variance_threshold.transform(features)
+                # Apply variance threshold transformation normally
+                try:
+                    features_transformed = self.variance_threshold.transform(features)
+                except ValueError as ve:
+                    print(f"Warning during prediction: {str(ve)}. Using original features.")
+                    features_transformed = features
             
             # Scale the features
             scaled_features = self.scaler.transform(features_transformed)
@@ -142,7 +185,10 @@ class AnomalyDetector:
             # Save feature processing status flags
             'has_features': getattr(self, 'has_features', False),
             'has_variance': getattr(self, 'has_variance', False),
-            'original_n_features': getattr(self, 'original_n_features', None)
+            'original_n_features': getattr(self, 'original_n_features', None),
+            # Save new attributes for handling zero variance
+            'non_zero_variance_mask': getattr(self, 'non_zero_variance_mask', None),
+            'added_noise': getattr(self, 'added_noise', False)
         }
         try:
             joblib.dump(model_data, filepath)
@@ -186,6 +232,10 @@ class AnomalyDetector:
             model.has_features = model_data.get('has_features', True)  # Default to True for backward compatibility
             model.has_variance = model_data.get('has_variance', True)  # Default to True for backward compatibility
             model.original_n_features = model_data.get('original_n_features', None)
+            
+            # Load zero variance handling attributes
+            model.non_zero_variance_mask = model_data.get('non_zero_variance_mask', None)
+            model.added_noise = model_data.get('added_noise', False)
             
             print(f"Anomaly detector model ({model.model_type}) loaded from {filepath}")
             return model
