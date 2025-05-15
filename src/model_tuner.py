@@ -5,7 +5,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 from pyod.models.hbos import HBOS
-from sklearn.cluster import Birch
+from sklearn.cluster import Birch, DBSCAN
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
 import json
 import os
