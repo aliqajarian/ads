@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
-from sklearn.cluster import DBSCAN, Birch
+from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import VarianceThreshold
 from pyod.models.hbos import HBOS
@@ -14,7 +14,6 @@ class AnomalyDetector:
                  svm_kernel='rbf', svm_gamma='scale', svm_nu=0.1, 
                  dbscan_eps=0.5, dbscan_min_samples=5,
                  hbos_n_bins=10, hbos_alpha=0.1,
-                 birch_threshold=0.5, birch_n_clusters=None, birch_branching_factor=50, birch_compute_labels=True,
                  debug_mode=False):  # Added debug mode parameter
         self.scaler = StandardScaler()
         self.variance_threshold = VarianceThreshold(threshold=0.0)
@@ -28,10 +27,6 @@ class AnomalyDetector:
         self.dbscan_min_samples = dbscan_min_samples
         self.hbos_n_bins = hbos_n_bins
         self.hbos_alpha = hbos_alpha
-        self.birch_threshold = birch_threshold
-        self.birch_n_clusters = birch_n_clusters
-        self.birch_branching_factor = birch_branching_factor
-        self.birch_compute_labels = birch_compute_labels
         self.detector = None
         self.debug_mode = debug_mode  # Store debug mode setting
         
@@ -59,15 +54,8 @@ class AnomalyDetector:
                 alpha=hbos_alpha,
                 contamination=contamination
             )
-        elif model_type == 'birch':
-            self.detector = Birch(
-                threshold=birch_threshold,
-                n_clusters=birch_n_clusters,
-                branching_factor=birch_branching_factor,
-                compute_labels=birch_compute_labels
-            )
         else:
-            raise ValueError(f"Unknown model_type: {model_type}. Supported types: 'isolation_forest', 'lof', 'one_class_svm', 'dbscan', 'hbos', 'birch'")
+            raise ValueError(f"Unknown model_type: {model_type}. Supported types: 'isolation_forest', 'lof', 'one_class_svm', 'dbscan', 'hbos'")
     
     def inspect_features(self, features):
         """Inspect and validate features before fitting the model.
@@ -274,17 +262,6 @@ class AnomalyDetector:
             # Fit the anomaly detector
             if self.model_type == 'dbscan':
                 self.scaled_features_for_dbscan_ = scaled_features
-            elif self.model_type == 'birch':
-                self.detector.fit(scaled_features)
-                self.birch_labels_ = self.detector.predict(scaled_features)
-                # Store the anomaly label (assuming the smallest cluster is anomalous)
-                if len(np.unique(self.birch_labels_)) > 1:
-                    # Find the smallest cluster and consider it as anomalies
-                    cluster_sizes = np.bincount(self.birch_labels_)
-                    self.anomaly_cluster_ = np.argmin(cluster_sizes)
-                else:
-                    # If only one cluster, no anomalies
-                    self.anomaly_cluster_ = -1
             else:
                 self.detector.fit(scaled_features)
                 
@@ -331,14 +308,6 @@ class AnomalyDetector:
             # Detect anomalies
             if self.model_type == 'dbscan':
                 predictions = self.detector.fit_predict(self.scaled_features_for_dbscan_)
-            elif self.model_type == 'birch':
-                cluster_labels = self.detector.predict(scaled_features)
-                # Mark samples in the anomaly cluster as anomalies
-                if hasattr(self, 'anomaly_cluster_') and self.anomaly_cluster_ != -1:
-                    predictions = (cluster_labels == self.anomaly_cluster_).astype(int) * -1
-                else:
-                    # If no anomaly cluster was identified, return all as normal
-                    predictions = np.zeros(scaled_features.shape[0])
             else:
                 predictions = self.detector.predict(scaled_features)
                 
@@ -363,17 +332,12 @@ class AnomalyDetector:
             'dbscan_min_samples': self.dbscan_min_samples,
             'hbos_n_bins': self.hbos_n_bins,
             'hbos_alpha': self.hbos_alpha,
-            'birch_threshold': self.birch_threshold,
-            'birch_n_clusters': self.birch_n_clusters,
-            'birch_branching_factor': self.birch_branching_factor,
-            'birch_compute_labels': self.birch_compute_labels,
             'debug_mode': getattr(self, 'debug_mode', False),
             'detector': self.detector,
             'scaler': self.scaler,
             'variance_threshold': self.variance_threshold,
             'scaled_features_for_dbscan_': getattr(self, 'scaled_features_for_dbscan_', None),
-            'birch_labels_': getattr(self, 'birch_labels_', None),
-            'anomaly_cluster_': getattr(self, 'anomaly_cluster_', None),
+
             # Save feature processing status flags
             'has_features': getattr(self, 'has_features', False),
             'has_variance': getattr(self, 'has_variance', False),
@@ -412,10 +376,6 @@ class AnomalyDetector:
                 dbscan_min_samples=model_data.get('dbscan_min_samples', 5),
                 hbos_n_bins=model_data.get('hbos_n_bins', 10),
                 hbos_alpha=model_data.get('hbos_alpha', 0.1),
-                birch_threshold=model_data.get('birch_threshold', 0.5),
-                birch_n_clusters=model_data.get('birch_n_clusters', None),
-                birch_branching_factor=model_data.get('birch_branching_factor', 50),
-                birch_compute_labels=model_data.get('birch_compute_labels', True),
                 debug_mode=model_data.get('debug_mode', False)
             )
             model.detector = model_data['detector']
@@ -426,11 +386,7 @@ class AnomalyDetector:
             if 'scaled_features_for_dbscan_' in model_data:
                 model.scaled_features_for_dbscan_ = model_data['scaled_features_for_dbscan_']
                 
-            # Load BIRCH specific data if available
-            if 'birch_labels_' in model_data:
-                model.birch_labels_ = model_data['birch_labels_']
-            if 'anomaly_cluster_' in model_data:
-                model.anomaly_cluster_ = model_data['anomaly_cluster_']
+
             
             # Load feature processing status flags
             model.has_features = model_data.get('has_features', True)  # Default to True for backward compatibility

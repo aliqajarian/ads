@@ -24,13 +24,13 @@ class ModelTuner:
         self.results_dir = os.path.join(output_dir, "model_tuning_results")
         os.makedirs(self.results_dir, exist_ok=True)
         
-        # Initialize base models
+        # Initialize base models with supported anomaly detectors
         self.base_models = {
             'isolation_forest': IsolationForest(),
             'lof': LocalOutlierFactor(novelty=True),
             'one_class_svm': OneClassSVM(),
             'hbos': HBOS(),
-            'birch': Birch()
+            'dbscan': DBSCAN()
         }
         
         # Define optimized parameter grids for each model
@@ -55,11 +55,10 @@ class ModelTuner:
                 'alpha': [0.1],  # Single optimal value
                 'contamination': [0.1]  # Single optimal value
             },
-            'birch': {
-                'threshold': [0.5],  # Default value for controlling subcluster diameter
-                'branching_factor': [50],  # Default value for maximum number of CF subclusters
-                'n_clusters': [3],  # Number of clusters after the final clustering step
-                'compute_labels': [True]  # Enable label computation
+            'dbscan': {
+                'eps': [0.5],  # Default value for neighborhood size
+                'min_samples': [5],  # Default value for minimum samples in neighborhood
+                'metric': ['euclidean']  # Most common metric
             }
         }
 
@@ -140,6 +139,43 @@ class ModelTuner:
         
 
 
+    def preprocess_features(self, X):
+        """
+        Preprocess features to handle zero-variance and near-zero-variance features.
+        
+        Args:
+            X: Feature matrix
+            
+        Returns:
+            Preprocessed feature matrix and preprocessing info
+        """
+        # Check for zero and near-zero variance features
+        feature_variances = np.var(X, axis=0)
+        non_zero_variance_mask = feature_variances > 0
+        near_zero_variance_mask = (feature_variances > 0) & (feature_variances < 1e-10)
+        
+        preprocessing_info = {
+            'original_shape': X.shape,
+            'non_zero_variance_count': int(np.sum(non_zero_variance_mask)),
+            'near_zero_variance_count': int(np.sum(near_zero_variance_mask)),
+            'zero_variance_count': int(np.sum(feature_variances == 0))
+        }
+        
+        # If all features have zero variance, add small noise
+        if preprocessing_info['non_zero_variance_count'] == 0:
+            print("Warning: All features have zero variance. Adding small noise...")
+            epsilon = 1e-6
+            X = X + np.random.normal(0, epsilon, size=X.shape)
+            preprocessing_info['noise_added'] = True
+            preprocessing_info['noise_epsilon'] = epsilon
+        else:
+            # Keep only features with non-zero variance
+            X = X[:, non_zero_variance_mask]
+            preprocessing_info['noise_added'] = False
+            preprocessing_info['selected_features_mask'] = non_zero_variance_mask
+        
+        return X, preprocessing_info
+
     def tune_models(self, X, y, checkpoint_path=None):
         """
         Perform hyperparameter tuning for all models.
@@ -153,6 +189,12 @@ class ModelTuner:
             dict: Best parameters and scores for each model
         """
         print("\nPerforming hyperparameter tuning for all models...")
+        
+        # Preprocess features
+        X_processed, preprocessing_info = self.preprocess_features(X)
+        print("\nFeature preprocessing summary:")
+        for key, value in preprocessing_info.items():
+            print(f"  {key}: {value}")
         
         # First check tuning status to get latest results
         status = self.check_tuning_status(checkpoint_path)
@@ -194,8 +236,8 @@ class ModelTuner:
         for model_name in models_to_tune:
             print(f"\nTuning hyperparameters for {model_name}...")
             
-            # Handle LOF and Birch models differently
-            if model_name in ['lof', 'birch']:
+            # Handle LOF and DBSCAN models differently
+            if model_name in ['lof', 'dbscan']:
                 # For LOF and Birch, we need to fit and predict separately
                 best_score = -float('inf')
                 best_model = None
