@@ -9,6 +9,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 from pyod.models.hbos import HBOS
 from sklearn.cluster import DBSCAN
+from sklearn.metrics import f1_score
 
 class Visualizer:
     def plot_rating_distribution(self, df):
@@ -205,13 +206,28 @@ class Visualizer:
             y: Target labels
             save_path: Optional directory path to save the plots
         """
-        # Define models to analyze
+        # Define models to analyze with simplified parameters
         models = {
-            'Isolation Forest': IsolationForest(random_state=42),
-            'Local Outlier Factor': LocalOutlierFactor(novelty=True),
-            'One-Class SVM': OneClassSVM(),
-            'HBOS': HBOS(),
-            'DBSCAN': DBSCAN()
+            'Isolation Forest': IsolationForest(
+                n_estimators=100,  # Reduced number of trees
+                random_state=42
+            ),
+            'Local Outlier Factor': LocalOutlierFactor(
+                n_neighbors=20,  # Fixed number of neighbors
+                novelty=True
+            ),
+            'One-Class SVM': OneClassSVM(
+                kernel='rbf',
+                nu=0.1
+            ),
+            'HBOS': HBOS(
+                n_bins=10,
+                alpha=0.1
+            ),
+            'DBSCAN': DBSCAN(
+                eps=0.5,
+                min_samples=5
+            )
         }
         
         # Create a figure with subplots for each model
@@ -222,37 +238,66 @@ class Visualizer:
             if idx >= len(axes):
                 break
                 
-            # Calculate learning curve
-            train_sizes, train_scores, test_scores = learning_curve(
-                model, X, y,
-                cv=5,
-                scoring='f1',
-                train_sizes=np.linspace(0.1, 1.0, 10),
-                n_jobs=-1
-            )
+            print(f"\nCalculating learning curve for {model_name}...")
             
-            # Calculate mean and std for train and test scores
-            train_mean = np.mean(train_scores, axis=1)
-            train_std = np.std(train_scores, axis=1)
-            test_mean = np.mean(test_scores, axis=1)
-            test_std = np.std(test_scores, axis=1)
+            # Define custom scorer for anomaly detection
+            def custom_f1_scorer(estimator, X, y):
+                try:
+                    if hasattr(estimator, 'fit_predict'):
+                        y_pred = estimator.fit_predict(X)
+                    else:
+                        estimator.fit(X)
+                        y_pred = estimator.predict(X)
+                    # Convert -1 to 1 for anomaly detection
+                    y_pred_binary = np.where(y_pred == -1, 1, 0)
+                    return f1_score(y, y_pred_binary, average='weighted', zero_division=1)
+                except Exception as e:
+                    print(f"Error in scoring for {model_name}: {str(e)}")
+                    return 0.0
             
-            # Plot learning curve
-            ax = axes[idx]
-            ax.plot(train_sizes, train_mean, label='Train F1', color='blue')
-            ax.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color='blue')
-            ax.plot(train_sizes, test_mean, label='Test F1', color='red')
-            ax.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color='red')
-            
-            # Customize plot
-            ax.set_title(f'Learning Curve - {model_name}')
-            ax.set_xlabel('Training Size')
-            ax.set_ylabel('F1 Score')
-            ax.grid(True, linestyle='--', alpha=0.7)
-            ax.legend(loc='lower right')
-            
-            # Set y-axis limits to be consistent across plots
-            ax.set_ylim([0, 1.1])
+            try:
+                # Calculate learning curve with reduced complexity
+                train_sizes, train_scores, test_scores = learning_curve(
+                    model, X, y,
+                    cv=3,  # Reduced number of CV folds
+                    scoring=custom_f1_scorer,
+                    train_sizes=np.linspace(0.2, 1.0, 5),  # Fewer training sizes
+                    n_jobs=1,  # Single process to avoid parallel issues
+                    verbose=1
+                )
+                
+                # Calculate mean and std for train and test scores
+                train_mean = np.mean(train_scores, axis=1)
+                train_std = np.std(train_scores, axis=1)
+                test_mean = np.mean(test_scores, axis=1)
+                test_std = np.std(test_scores, axis=1)
+                
+                # Plot learning curve
+                ax = axes[idx]
+                ax.plot(train_sizes, train_mean, label='Train F1', color='blue')
+                ax.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color='blue')
+                ax.plot(train_sizes, test_mean, label='Test F1', color='red')
+                ax.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color='red')
+                
+                # Customize plot
+                ax.set_title(f'Learning Curve - {model_name}')
+                ax.set_xlabel('Training Size')
+                ax.set_ylabel('F1 Score')
+                ax.grid(True, linestyle='--', alpha=0.7)
+                ax.legend(loc='lower right')
+                
+                # Set y-axis limits to be consistent across plots
+                ax.set_ylim([0, 1.1])
+                
+            except Exception as e:
+                print(f"Error calculating learning curve for {model_name}: {str(e)}")
+                # Create empty plot with error message
+                ax = axes[idx]
+                ax.text(0.5, 0.5, f'Error: {str(e)}', 
+                       horizontalalignment='center',
+                       verticalalignment='center',
+                       transform=ax.transAxes)
+                ax.set_title(f'Learning Curve - {model_name}')
         
         # Remove empty subplot if any
         if len(models) < len(axes):
@@ -263,7 +308,10 @@ class Visualizer:
         
         # Save plot if path is provided
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Learning curves plot saved to {save_path}")
+            try:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Learning curves plot saved to {save_path}")
+            except Exception as e:
+                print(f"Error saving plot: {str(e)}")
         
         plt.show()
