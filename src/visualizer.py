@@ -319,3 +319,150 @@ class Visualizer:
             print("Learning curves plot generated successfully")
         except Exception as e:
             print(f"Error generating learning curves plot: {str(e)}")
+
+    def print_model_metrics(self, results):
+        """Print metrics for each model."""
+        try:
+            print("\nModel Performance Metrics:")
+            print("-" * 50)
+            for model_name, metrics in results.items():
+                print(f"\n{model_name}:")
+                print("-" * 30)
+                for metric_name, value in metrics.items():
+                    if isinstance(value, (int, float)):
+                        print(f"{metric_name}: {value:.4f}")
+                    else:
+                        print(f"{metric_name}: {value}")
+            print("\n" + "-" * 50)
+        except Exception as e:
+            print(f"Error printing model metrics: {str(e)}")
+
+    def plot_dbn_vs_others_comparison(self, dbn_results, other_results):
+        """Plot comparison between DBN and other models."""
+        try:
+            print("Generating DBN vs other models comparison plot...")
+            
+            # Prepare data for plotting
+            models = ['DBN'] + list(other_results.keys())
+            metrics = ['precision', 'recall', 'f1_score', 'auc_score']
+            
+            # Create subplots for each metric
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            axes = axes.ravel()
+            
+            for idx, metric in enumerate(metrics):
+                values = [dbn_results.get(metric, 0)] + [other_results[model].get(metric, 0) for model in other_results]
+                
+                ax = axes[idx]
+                bars = ax.bar(models, values)
+                
+                # Add value labels on top of bars
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.3f}',
+                           ha='center', va='bottom')
+                
+                ax.set_title(f'{metric.replace("_", " ").title()} Comparison')
+                ax.set_ylim(0, 1.1)
+                ax.grid(True, linestyle='--', alpha=0.3)
+                plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+            
+            plt.tight_layout()
+            plt.show()
+            print("DBN vs other models comparison plot generated successfully")
+        except Exception as e:
+            print(f"Error generating DBN vs other models comparison plot: {str(e)}")
+
+    def plot_dbn_feature_importance(self, feature_importance, feature_names):
+        """Plot DBN feature importance."""
+        try:
+            print("Generating DBN feature importance plot...")
+            
+            # Sort features by importance
+            sorted_idx = np.argsort(feature_importance)
+            pos = np.arange(sorted_idx.shape[0]) + .5
+            
+            plt.figure(figsize=(12, 8))
+            plt.barh(pos, feature_importance[sorted_idx])
+            plt.yticks(pos, feature_names[sorted_idx])
+            plt.xlabel('Feature Importance')
+            plt.title('DBN Feature Importance')
+            plt.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            plt.show()
+            print("DBN feature importance plot generated successfully")
+        except Exception as e:
+            print(f"Error generating DBN feature importance plot: {str(e)}")
+
+    def plot_dbn_anomaly_scores_distribution(self, dbn_scores, other_scores):
+        """Plot distribution of anomaly scores from DBN and other models."""
+        try:
+            print("Generating anomaly scores distribution plot...")
+            
+            plt.figure(figsize=(12, 6))
+            
+            # Plot DBN scores
+            sns.kdeplot(dbn_scores, label='DBN', fill=True, alpha=0.3)
+            
+            # Plot other models' scores
+            for model_name, scores in other_scores.items():
+                sns.kdeplot(scores, label=model_name, fill=True, alpha=0.2)
+            
+            plt.title('Distribution of Anomaly Scores')
+            plt.xlabel('Anomaly Score')
+            plt.ylabel('Density')
+            plt.legend()
+            plt.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            plt.show()
+            print("Anomaly scores distribution plot generated successfully")
+        except Exception as e:
+            print(f"Error generating anomaly scores distribution plot: {str(e)}")
+
+    def plot_dbn_confusion_matrix(self, y_true, y_pred, model_name="DBN"):
+        """Plot confusion matrix for DBN predictions."""
+        try:
+            print(f"Generating confusion matrix for {model_name}...")
+            
+            from sklearn.metrics import confusion_matrix
+            import seaborn as sns
+            
+            cm = confusion_matrix(y_true, y_pred)
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+            plt.title(f'Confusion Matrix - {model_name}')
+            plt.ylabel('True Label')
+            plt.xlabel('Predicted Label')
+            plt.show()
+            print(f"Confusion matrix for {model_name} generated successfully")
+        except Exception as e:
+            print(f"Error generating confusion matrix: {str(e)}")
+
+    def plot_dbn_roc_curves(self, dbn_fpr, dbn_tpr, other_models_curves):
+        """Plot ROC curves comparing DBN with other models."""
+        try:
+            print("Generating ROC curves comparison plot...")
+            
+            plt.figure(figsize=(10, 8))
+            
+            # Plot DBN ROC curve
+            plt.plot(dbn_fpr, dbn_tpr, label='DBN', linewidth=2)
+            
+            # Plot other models' ROC curves
+            for model_name, (fpr, tpr) in other_models_curves.items():
+                plt.plot(fpr, tpr, label=model_name, linestyle='--')
+            
+            # Plot diagonal line
+            plt.plot([0, 1], [0, 1], 'k--', label='Random')
+            
+            plt.title('ROC Curves Comparison')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.legend()
+            plt.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            plt.show()
+            print("ROC curves comparison plot generated successfully")
+        except Exception as e:
+            print(f"Error generating ROC curves comparison plot: {str(e)}")
