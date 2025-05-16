@@ -201,18 +201,11 @@ def generate_visualizations(df, features, anomalies, model_results, layer_scores
         plt.savefig(os.path.join(output_dirs['plots'], "rating_distribution.png"), dpi=300, bbox_inches='tight')
         plt.close()
         
-        # Plot helpfulness vs rating
-        print("\nGenerating helpfulness vs rating plot...")
+        # Plot review length vs rating
+        print("\nGenerating review length vs rating plot...")
         plt.figure(figsize=(12, 7))
-        visualizer.plot_helpfulness_vs_rating(df)
-        plt.savefig(os.path.join(output_dirs['plots'], "helpfulness_vs_rating.png"), dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Plot temporal patterns
-        print("\nGenerating temporal patterns plot...")
-        plt.figure(figsize=(15, 7))
-        visualizer.plot_temporal_patterns(df)
-        plt.savefig(os.path.join(output_dirs['plots'], "temporal_patterns.png"), dpi=300, bbox_inches='tight')
+        visualizer.plot_review_length_vs_rating(df)
+        plt.savefig(os.path.join(output_dirs['plots'], "review_length_vs_rating.png"), dpi=300, bbox_inches='tight')
         plt.close()
         
         # Plot anomaly distribution with enhanced visualization
@@ -227,22 +220,6 @@ def generate_visualizations(df, features, anomalies, model_results, layer_scores
         plt.figure(figsize=(12, 7))
         visualizer.plot_dbn_layer_scores(layer_scores)
         plt.savefig(os.path.join(output_dirs['plots'], "dbn_layer_scores.png"), dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Plot DBN layer weights
-        print("\nGenerating DBN layer weights visualization...")
-        for layer_idx, layer_score in enumerate(layer_scores, 1):
-            plt.figure(figsize=(12, 8))
-            visualizer.plot_dbn_layer_weights(np.random.randn(50, 100), layer_idx)  # Sample weights for demonstration
-            plt.savefig(os.path.join(output_dirs['plots'], f"dbn_layer_weights_{layer_idx}.png"), dpi=300, bbox_inches='tight')
-            plt.close()
-        
-        # Plot DBN reconstruction error
-        print("\nGenerating DBN reconstruction error plot...")
-        plt.figure(figsize=(12, 6))
-        error_distribution = np.random.normal(0, 1, 1000)  # Sample error distribution
-        visualizer.plot_dbn_reconstruction_error(error_distribution)
-        plt.savefig(os.path.join(output_dirs['plots'], "dbn_reconstruction_error.png"), dpi=300, bbox_inches='tight')
         plt.close()
         
         # Plot model comparison with enhanced visualization
@@ -269,14 +246,6 @@ def generate_visualizations(df, features, anomalies, model_results, layer_scores
         plt.savefig(os.path.join(output_dirs['plots'], "roc_curves_comparison.png"), dpi=300, bbox_inches='tight')
         plt.close()
         
-        # Plot model performance metrics
-        print("\nGenerating model performance summary...")
-        summary_table_path = os.path.join(output_dirs['plots'], "model_performance_summary.png")
-        print(f"Saving model summary table to: {summary_table_path}")
-        plt.figure(figsize=(12, 6))
-        visualizer.plot_model_summary_table(model_metrics, save_path=summary_table_path)
-        plt.close()
-        
         # Verify files were created
         print("\nVerifying generated files:")
         expected_files = [
@@ -284,8 +253,7 @@ def generate_visualizations(df, features, anomalies, model_results, layer_scores
             os.path.join(output_dirs['plots'], "review_length_vs_rating.png"),
             os.path.join(output_dirs['plots'], "anomaly_distribution.png"),
             os.path.join(output_dirs['plots'], "dbn_layer_scores.png"),
-            model_comp_path,
-            summary_table_path
+            model_comp_path
         ]
         
         # Add t-SNE files
@@ -297,21 +265,6 @@ def generate_visualizations(df, features, anomalies, model_results, layer_scores
                 print(f"✓ {file_path} exists")
             else:
                 print(f"✗ {file_path} is missing")
-        
-        # Plot precision-recall curve
-        visualizer.plot_dbn_precision_recall(y_true, y_scores)
-        
-        # Plot confusion matrix
-        visualizer.plot_dbn_confusion_matrix(y_true, y_pred)
-        
-        # Plot feature importance
-        visualizer.plot_dbn_feature_importance(feature_importance, feature_names)
-        
-        # Plot ROC curve
-        visualizer.plot_dbn_roc_curve(y_true, y_scores)
-        
-        # Plot anomaly scores by rating
-        visualizer.plot_dbn_anomaly_scores_by_rating(df, anomaly_scores)
         
     except Exception as e:
         print(f"Error generating visualizations: {str(e)}")

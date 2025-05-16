@@ -116,46 +116,58 @@ class Visualizer:
         except Exception as e:
             print(f"Error generating model comparison plot: {str(e)}")
 
-    def plot_tsne_features(self, features, anomalies, save_path=None):
-        """Plot t-SNE visualization."""
+    def plot_tsne_features(self, features, anomalies, perplexity=30, n_iter=1000, save_path=None):
+        """Plot t-SNE visualization of DBN features with enhanced styling.
+        
+        Args:
+            features: High-dimensional feature matrix from DBN
+            anomalies: Binary labels indicating anomaly status (0: normal, 1: anomaly)
+            perplexity: t-SNE perplexity parameter (default: 30)
+            n_iter: Number of iterations for optimization (default: 1000)
+            save_path: Optional path to save the plot (default: None)
+        """
         try:
             print("Generating t-SNE visualization...")
             if features is None or anomalies is None:
                 print("Warning: Missing features or anomalies data for t-SNE plot")
                 return
 
-            # Apply t-SNE
-            tsne = TSNE(n_components=2, random_state=42)
-            features_tsne = tsne.fit_transform(features)
+            # Apply t-SNE dimensionality reduction
+            tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=n_iter, random_state=42)
+            features_2d = tsne.fit_transform(features)
+            
+            # Create DataFrame for easier plotting
+            df_plot = pd.DataFrame({
+                'TSNE1': features_2d[:, 0],
+                'TSNE2': features_2d[:, 1],
+                'Anomaly': ['Anomaly' if a == 1 else 'Normal' for a in anomalies]
+            })
             
             plt.figure(figsize=(12, 8))
-            scatter = plt.scatter(
-                features_tsne[:, 0], 
-                features_tsne[:, 1], 
-                c=anomalies, 
-                cmap='coolwarm', 
+            
+            # Plot with enhanced styling
+            scatter = sns.scatterplot(
+                data=df_plot,
+                x='TSNE1',
+                y='TSNE2',
+                hue='Anomaly',
+                palette={'Normal': 'blue', 'Anomaly': 'red'},
                 alpha=0.6,
-                s=50
+                s=100,
+                style='Anomaly',
+                markers={'Normal': 'o', 'Anomaly': 'X'}
             )
             
-            plt.title("t-SNE Visualization of DBN Features", fontsize=14)
-            plt.xlabel("t-SNE Component 1", fontsize=12)
-            plt.ylabel("t-SNE Component 2", fontsize=12)
+            plt.title('t-SNE Visualization of DBN Features', fontsize=14, pad=20)
+            plt.xlabel('t-SNE Component 1', fontsize=12)
+            plt.ylabel('t-SNE Component 2', fontsize=12)
+            plt.legend(title='Review Type', title_fontsize=12, fontsize=10)
             
-            cbar = plt.colorbar(scatter)
-            cbar.set_label('Anomaly Status', fontsize=12)
-            cbar.set_ticks([0, 1])
-            cbar.set_ticklabels(['Normal', 'Anomaly'])
+            # Add grid and adjust layout
+            plt.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
             
-            plt.grid(True, linestyle='--', alpha=0.7)
-            
-            plt.legend(
-                handles=scatter.legend_elements()[0],
-                labels=['Normal', 'Anomaly'],
-                title='Review Type',
-                loc='upper right'
-            )
-            
+            # Save plot if path is provided
             if save_path:
                 plt.savefig(save_path, dpi=300, bbox_inches='tight')
                 print(f"t-SNE plot saved to {save_path}")
@@ -214,7 +226,7 @@ class Visualizer:
             print("Behavioral features correlation plot generated successfully")
         except Exception as e:
             print(f"Error generating behavioral features correlation plot: {str(e)}")
-
+            
     def plot_learning_curves(self, X, y, save_path=None):
         """Plot learning curves."""
         try:
@@ -466,3 +478,64 @@ class Visualizer:
             print("ROC curves comparison plot generated successfully")
         except Exception as e:
             print(f"Error generating ROC curves comparison plot: {str(e)}")
+
+    def plot_helpfulness_vs_rating(self, df):
+        """Plot helpfulness ratio vs rating with enhanced visualization."""
+        try:
+            print("Generating helpfulness vs rating plot...")
+            plt.figure(figsize=(12, 7))
+            sns.boxplot(x='review/score', y='helpfulness_ratio', data=df, palette='viridis')
+            plt.title('Helpfulness Ratio vs Rating', fontsize=14, pad=20)
+            plt.xlabel('Rating', fontsize=12)
+            plt.ylabel('Helpfulness Ratio', fontsize=12)
+            plt.grid(True, linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            print("Helpfulness vs rating plot generated successfully")
+        except Exception as e:
+            print(f"Error generating helpfulness vs rating plot: {str(e)}")
+
+    def plot_dbn_layer_weights(self, weights, layer_idx, save_path=None):
+        """Plot DBN layer weights using a heatmap visualization.
+        
+        Args:
+            weights: Weight matrix for the DBN layer
+            layer_idx: Index of the layer being visualized
+            save_path: Optional path to save the plot (default: None)
+        """
+        try:
+            print(f"Generating DBN layer {layer_idx} weights visualization...")
+            if weights is None:
+                print("Warning: No weights provided for DBN layer plot")
+                return
+
+            plt.figure(figsize=(12, 8))
+            
+            # Create heatmap with enhanced styling
+            sns.heatmap(
+                weights,
+                cmap='viridis',
+                center=0,
+                annot=False,
+                fmt='.2f',
+                cbar_kws={'label': 'Weight Value', 'shrink': .8},
+                xticklabels=False,
+                yticklabels=False
+            )
+            
+            plt.title(f'DBN Layer {layer_idx} Weight Matrix', fontsize=14, pad=20)
+            plt.xlabel('Hidden Units', fontsize=12)
+            plt.ylabel('Visible Units', fontsize=12)
+            
+            # Add grid and adjust layout
+            plt.grid(False)
+            plt.tight_layout()
+            
+            # Save plot if path is provided
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                print(f"Layer {layer_idx} weights plot saved to {save_path}")
+            
+            plt.show()
+            print(f"DBN layer {layer_idx} weights visualization generated successfully")
+        except Exception as e:
+            print(f"Error generating DBN layer {layer_idx} weights visualization: {str(e)}")

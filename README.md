@@ -1,114 +1,116 @@
 # Amazon Book Reviews Anomaly Detection System
 
+A comprehensive system for detecting anomalies in Amazon book reviews using various machine learning models and visualization techniques.
+
 ## Overview
-This project implements an advanced anomaly detection system for Amazon book reviews using Deep Belief Networks (DBN) and various machine learning techniques. It provides a complete pipeline for data processing, model training, anomaly detection, and visualization.
+
+This project implements an anomaly detection system for Amazon book review data, utilizing multiple models including Isolation Forest, Local Outlier Factor (LOF), One-Class SVM, and HBOS. The system provides extensive visualization capabilities to analyze and compare model performance.
+
+## Dataset
+
+The project uses the Amazon Book Reviews dataset from the McAuley Lab's Amazon Reviews 2023 collection <mcreference link="https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023" index="1">1</mcreference>. The dataset includes:
+
+- 29.5M book reviews
+- 10.3M unique users
+- 4.4M unique items
+- 2.9B review text tokens
+- Features include ratings, review text, helpfulness votes, and timestamps
+- Data spans from May 1996 to September 2023
 
 ## Features
 
-### Data Processing
-- Efficient data loading with support for both full and limited datasets
-- Automatic feature extraction and preprocessing
-- Memory-efficient handling of large datasets
-- Support for Google Colab integration
-
-### Model Components
-- Deep Belief Network (DBN) implementation with RBM layers
+### Anomaly Detection
 - Multiple anomaly detection models:
   - Isolation Forest
+  - Local Outlier Factor (LOF)
   - One-Class SVM
-  - Local Outlier Factor
-  - Elliptic Envelope
-- Model tuning and hyperparameter optimization
-- Automatic checkpointing and model state management
+  - Histogram-based Outlier Score (HBOS)
+- Model comparison and evaluation
+- Configurable anomaly thresholds
 
 ### Visualization
 - Interactive visualization of results
-- Learning curves and performance metrics
-- Anomaly distribution analysis
-- Feature importance visualization
+- t-SNE feature space visualization
+- Behavioral features correlation analysis
+- Rating distribution analysis
+- Review length vs. rating analysis
+- Anomaly distribution visualization
+- DBN layer scores visualization
+- Model comparison plots
+- ROC curves comparison
 
-## Dataset Source
-The dataset used in this project is sourced from Kaggle, specifically the 'mohamedbakhet/amazon-books-reviews' dataset. It contains comprehensive reviews of books available on Amazon.
+## Project Structure
+
+```
+src/
+├── main.py              # Main execution script
+├── data_loader.py       # Data loading and preprocessing
+├── dbn.py              # Deep Belief Network implementation
+├── anomaly_detector.py  # Anomaly detection models
+├── model_tuner.py      # Model tuning and optimization
+├── visualizer.py       # Visualization utilities
+└── vis_mod.py          # Enhanced visualization module
+```
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone https://github.com/yourusername/ads.git
 cd ads
 ```
 
-2. Install the required dependencies:
+2. Install required packages:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-### Basic Usage
+1. Prepare your data:
 ```python
-from data_loader import DataLoader
-from anomaly_detector import AnomalyDetector
-from visualizer import Visualizer
+from src.data_loader import DataLoader
 
-# Initialize components
 data_loader = DataLoader()
-anomaly_detector = AnomalyDetector()
-visualizer = Visualizer()
-
-# Load and prepare data
-df = data_loader.load_data(max_records=250000)  # Use limited dataset for faster processing
-features = data_loader.prepare_features(df)
-X_train, X_test, df_train, df_test = data_loader.split_train_test(features, df)
-
-# Train anomaly detection models
-results = anomaly_detector.train_and_evaluate(X_train, X_test)
-
-# Visualize results
-visualizer.plot_results(results)
+df = data_loader.load_data()
 ```
 
-### Advanced Usage
-For more advanced usage, including model tuning and custom configurations, refer to the examples in the `src` directory.
+2. Run anomaly detection:
+```python
+from src.anomaly_detector import AnomalyDetector
 
-## Project Structure
+detector = AnomalyDetector()
+anomalies = detector.detect(df)
+```
 
-- `src/`
-  - `main.py`: Main execution script
-  - `data_loader.py`: Data loading and preprocessing
-  - `dbn.py`: Deep Belief Network implementation
-  - `anomaly_detector.py`: Anomaly detection models
-  - `model_tuner.py`: Model tuning and optimization
-  - `visualizer.py`: Visualization utilities
-  - `visualization.py`: Additional visualization tools
+3. Generate visualizations:
+```python
+from src.vis_mod import generate_visualizations
 
-## Dependencies
-
-- pandas
-- numpy
-- scikit-learn
-- kagglehub
-- joblib
-- matplotlib
-- seaborn
-- memory_profiler (optional)
-
-## Running the Project
-
-1. Ensure all dependencies are installed
-2. Set up your Kaggle API credentials if using the full dataset
-3. Run the main script:
-```bash
-python src/main.py
+generate_visualizations(df, features, anomalies, model_results, layer_scores)
 ```
 
 ## Output
 
-The system generates various outputs:
-- Trained models saved as pickle files
-- Performance metrics and results in JSON format
-- Visualization plots and charts
-- Model checkpoints for resuming training
+The system generates various visualization outputs in the `ads_output` directory:
+
+```
+ads_output/
+├── tsne_visualizations/
+├── correlation_visualizations/
+├── learning_curves/
+└── plots/
+```
+
+## Requirements
+
+- Python 3.8+
+- pandas
+- numpy
+- scikit-learn
+- matplotlib
+- seaborn
+- pyod
 
 ## Contributing
 
@@ -116,4 +118,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the LICENSE file for details.
